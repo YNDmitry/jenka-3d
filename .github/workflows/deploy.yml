@@ -1,57 +1,59 @@
-name: Build and Deploy
+name: Auto Release & Deploy
 
 on:
   push:
-    branches: [ "main" ]
-    tags: [ "v*" ] # Triggers on tags like v1.0.0, v0.1.0
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
-  build-and-release:
+  release:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Essential for version calculation
 
+      # 1. Automate Versioning (Tagging)
+      - name: Bump Version and Tag
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch # 'update' -> v1.0.1
+          release_branches: main
+
+      # 2. Build Environment
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
           bun-version: latest
 
-      - name: Install Dependencies
-        run: bun install --frozen-lockfile
+      - name: Install & Build
+        run: |
+          bun install --frozen-lockfile
+          bun run build:lib
 
-      - name: Build Library
-        run: bun run build:lib
+      # 3. Create Official GitHub Release (v1.0.x)
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: ${{ steps.tag_version.outputs.changelog }}
+          files: |
+            dist/lib/jenka-3d.js
+            dist/lib/style.css
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ----------------------------------------------------------------
-      # SCENARIO 1: Rolling Update (Push to Main)
-      # Updates the 'release' branch code for '.../repo@release/...' URLs
-      # ----------------------------------------------------------------
-      - name: Deploy to Release Branch
-        if: github.ref == 'refs/heads/main'
+      # 4. Update Rolling Branch (for @release CDN links)
+      - name: Update Rolling CDN
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist/lib
           publish_branch: release
           force_orphan: true
-
-      # ----------------------------------------------------------------
-      # SCENARIO 2: Stable Release (Push Tag)
-      # Creates a GitHub Release for '.../repo@v1.0.0/...' URLs
-      # ----------------------------------------------------------------
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            dist/lib/jenka-3d.js
-            dist/lib/style.css
-          token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false
-          prerelease: false
-          generate_release_notes: true
