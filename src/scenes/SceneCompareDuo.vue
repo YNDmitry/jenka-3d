@@ -1,0 +1,51 @@
+<script setup lang="ts">
+import { TresCanvas } from '@tresjs/core'
+import { ACESFilmicToneMapping, SRGBColorSpace } from 'three'
+import RenderDriver from '../three/RenderDriver.vue'
+import SceneCompareDuoContent from './SceneCompareDuoContent.vue'
+import type { CompareMode, DeviceClass, LoaderState, QualityTier, WebflowSceneConfig } from '../shared/types'
+
+const props = defineProps<{
+  container?: HTMLElement
+  config: WebflowSceneConfig
+  active: boolean
+  quality: QualityTier
+  device: DeviceClass
+  reducedMotion: boolean
+  exposure: number
+  emissive: number
+  envIntensity: number
+  bloom: number
+  background: boolean
+  dpr?: number | [number, number]
+}>()
+
+const emit = defineEmits<{
+  (e: 'state', state: LoaderState): void
+  (e: 'change-mode', mode: CompareMode): void
+}>()
+
+const onState = (s: LoaderState) => emit('state', s)
+const onChangeMode = (m: CompareMode) => emit('change-mode', m)
+
+const transparent = true
+const antialias = false
+</script>
+
+<template>
+  <TresCanvas
+    render-mode="on-demand"
+    :alpha="transparent"
+    :clear-alpha="transparent ? 0 : 1"
+    clear-color="#000000"
+    :dpr="dpr"
+    :antialias="antialias"
+    :tone-mapping="ACESFilmicToneMapping"
+    :tone-mapping-exposure="exposure"
+    :output-color-space="SRGBColorSpace"
+    :use-legacy-lights="false"
+  >
+    <RenderDriver :active="active" :quality="quality" :reduced-motion="reducedMotion" />
+    <SceneCompareDuoContent v-bind="props" @state="onState" @change-mode="onChangeMode" />
+  </TresCanvas>
+</template>

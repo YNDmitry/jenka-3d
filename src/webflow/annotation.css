@@ -1,0 +1,99 @@
+.jenka-leader-tooltip {
+  position: absolute;
+  width: 322px; /* 768 * 0.42 */
+  height: 60px;  /* 144 * 0.42 */
+  pointer-events: none;
+  user-select: none;
+  opacity: 0;
+  animation: fadeInLeader 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+  /* Anchor: Top-Right tip at (0,0), so we shift left by 100% 
+     Shift up by -7% to start the leader line slightly above the center point */
+  transform: translate(-100%, -7%);
+  z-index: 1000;
+}
+
+.jenka-leader-tooltip.is-mirrored {
+  transform: translate(0, -7%);
+}
+
+.jenka-leader-tooltip.is-mirrored .leader-svg {
+  transform: scaleX(-1);
+}
+
+.leader-svg {
+  width: 100%;
+  height: 100%;
+  /* Stronger shadow for contrast on light backgrounds */
+  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8)) drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+}
+
+.leader-label {
+  position: absolute;
+  /* (SVG Y=70.2) * 0.42 */
+  top: 29px;
+  /* (SVG X=12.3) * 0.42 */
+  left: 5px;
+  /* (SVG Box Width ~177.5) * 0.42 */
+  width: 75px;
+  /* (SVG Box Height ~71.6) * 0.42 */
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-family: 'Space Mono', monospace, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  /* Hard outline + Glow for maximum readability */
+  text-shadow: 
+    0 1px 2px rgba(0,0,0,0.8),
+    0 0 10px rgba(255,255,255,0.5);
+  /* Glass UI effect */
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  box-sizing: border-box;
+}
+
+.is-mirrored .leader-label {
+  left: auto;
+  right: 5px;
+}
+
+/* Hide on Tablet and Mobile (Webflow standard breakpoints) */
+@media (max-width: 991px) {
+  .jenka-leader-tooltip {
+    display: none !important;
+  }
+}
+
+@keyframes fadeInLeader {
+  from { 
+    opacity: 0; 
+    transform: translate(-100%, 10px) scale(0.9);
+    filter: blur(10px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translate(-100%, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.jenka-leader-tooltip.is-mirrored {
+  animation: fadeInLeaderMirrored 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes fadeInLeaderMirrored {
+  from { 
+    opacity: 0; 
+    transform: translate(0, 10px) scale(0.9);
+    filter: blur(10px);
+  }
+  to { 
+    opacity: 1; 
+    transform: translate(0, 0) scale(1);
+    filter: blur(0);
+  }
+}
