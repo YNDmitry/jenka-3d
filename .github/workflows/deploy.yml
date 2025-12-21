@@ -1,14 +1,15 @@
-name: Build and Release
+name: Build and Deploy
 
 on:
   push:
     branches: [ "main" ]
+    tags: [ "v*" ] # Triggers on tags like v1.0.0, v0.1.0
 
 permissions:
   contents: write
 
 jobs:
-  build-and-deploy:
+  build-and-release:
     runs-on: ubuntu-latest
 
     steps:
@@ -26,10 +27,31 @@ jobs:
       - name: Build Library
         run: bun run build:lib
 
+      # ----------------------------------------------------------------
+      # SCENARIO 1: Rolling Update (Push to Main)
+      # Updates the 'release' branch code for '.../repo@release/...' URLs
+      # ----------------------------------------------------------------
       - name: Deploy to Release Branch
+        if: github.ref == 'refs/heads/main'
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./dist/lib
           publish_branch: release
           force_orphan: true
+
+      # ----------------------------------------------------------------
+      # SCENARIO 2: Stable Release (Push Tag)
+      # Creates a GitHub Release for '.../repo@v1.0.0/...' URLs
+      # ----------------------------------------------------------------
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/lib/jenka-3d.js
+            dist/lib/style.css
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
