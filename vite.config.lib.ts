@@ -32,9 +32,9 @@ export default defineConfig({
         name: 'Jenka3D',
         // Ensure standard exports
         extend: true,
-        // Force CSS filename to style.css
+        // Force CSS filename to jenka-3d.css
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name === 'style.css') return 'style.css';
+          if (assetInfo.name && assetInfo.name.endsWith('.css')) return 'jenka-3d.css';
           return assetInfo.name;
         },
       }
