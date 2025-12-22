@@ -2,9 +2,11 @@ import { onMounted, onUnmounted, ref, shallowRef, type Ref } from 'vue'
 import { useLoop } from '@tresjs/core'
 import { CONSTANTS } from './config'
 import type { PerspectiveCamera } from 'three'
+import type { DeviceClass } from '../../shared/types'
 
 export function useHeroInteraction(
   active: Ref<boolean>,
+  device: Ref<DeviceClass>,
   reducedMotion: Ref<boolean>,
   container: HTMLElement | undefined,
   cameraRef: Ref<PerspectiveCamera | null>,
@@ -70,8 +72,9 @@ export function useHeroInteraction(
       currentParallax.y += dy * easing
 
       if (cameraRef.value) {
-        cameraRef.value.position.x = CONSTANTS.layout.camPos[0] + currentParallax.x
-        cameraRef.value.position.y = CONSTANTS.layout.camPos[1] + currentParallax.y
+        const baseCamPos = CONSTANTS.layout.camPos[device.value] || CONSTANTS.layout.camPos.desktop
+        cameraRef.value.position.x = baseCamPos[0] + currentParallax.x
+        cameraRef.value.position.y = baseCamPos[1] + currentParallax.y
       }
 
       if (invalidate) {

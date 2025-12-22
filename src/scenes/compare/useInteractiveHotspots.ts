@@ -17,6 +17,7 @@ export function useInteractiveHotspots(
   const tooltipVisible = ref(false)
   const glowNudge = reactive({ x: 0, y: 0, z: 0 })
   let ctx: gsap.Context | null = null
+  let activeObject: Object3D | null = null
 
   let leaveTimer: any = null
   let showTimer: gsap.core.Tween | null = null // Store the GSAP delayedCall
@@ -45,7 +46,15 @@ export function useInteractiveHotspots(
       showTimer = null
     }
 
+    // Reset previous object if any
+    if (activeObject) {
+      activeObject.userData.hideGlint = false
+    }
+
     activeInteraction.value = item.id
+    activeObject = item.object
+    activeObject.userData.hideGlint = true
+
     tooltipVisible.value = false
     document.body.style.cursor = 'pointer'
 
@@ -92,6 +101,11 @@ export function useInteractiveHotspots(
     }
 
     leaveTimer = setTimeout(() => {
+      if (activeObject) {
+        activeObject.userData.hideGlint = false
+        activeObject = null
+      }
+
       activeInteraction.value = null
       tooltipVisible.value = false
       leaveTimer = null
@@ -112,6 +126,11 @@ export function useInteractiveHotspots(
   }
 
   function reset() {
+    if (activeObject) {
+      activeObject.userData.hideGlint = false
+      activeObject = null
+    }
+
     activeInteraction.value = null
     tooltipVisible.value = false
     

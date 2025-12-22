@@ -38,7 +38,7 @@ const onState = (s: LoaderState) => emit('state', s)
     :alpha="true"
     :clear-alpha="0"
     clear-color="#000000"
-    :dpr="[1, 2]"
+    :dpr="[1, 1.25]"
     :antialias="false"
     :tone-mapping="NoToneMapping"
     :output-color-space="SRGBColorSpace"

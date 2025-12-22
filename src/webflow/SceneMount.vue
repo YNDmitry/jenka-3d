@@ -43,8 +43,8 @@ const quality = computed<QualityTier>(() => {
   return resolveQualityTier('auto', fallback)
 })
 
-const exposure = 1.15
-const emissive = 1.75
+const exposure = 1.0
+const emissive = 1.0
 const envIntensity = 1.0
 const bloom = 0.8
 const background = false
@@ -100,7 +100,7 @@ onUnmounted(() => {
   if (mq && rmListener) { mq.removeEventListener?.('change', rmListener) }
 })
 
-const dpr = computed<[number, number]>(() => [1, window.devicePixelRatio])
+const dpr = computed<[number, number]>(() => [1, Math.min(window.devicePixelRatio, 1.5)])
 
 // Static container style
 const containerStyle = {

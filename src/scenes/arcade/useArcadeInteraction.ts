@@ -1,17 +1,20 @@
-import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import { useLoop } from '@tresjs/core'
 import { gsap } from 'gsap'
 import { Vector3, type PerspectiveCamera, type Object3D } from 'three'
 import { CONSTANTS } from './config'
+import type { DeviceClass } from '../../shared/types'
 
 export function useArcadeInteraction(
   active: Ref<boolean>,
+  device: Ref<DeviceClass>,
   reducedMotion: Ref<boolean>,
   container: HTMLElement | undefined,
   cameraRef: Ref<PerspectiveCamera | null>,
   modelA: Ref<Object3D | null>,
   modelB: Ref<Object3D | null>,
   invalidate: () => void,
+  onInternalSwap: () => void,
   onModelClick?: () => void,
 ) {
   const isSwapped = ref(false)
@@ -23,18 +26,45 @@ export function useArcadeInteraction(
   
   const hoverState = reactive({ A: 0, B: 0 })
 
+  const getConfig = () => ({
+    front: CONSTANTS.states.front[device.value] || CONSTANTS.states.front.desktop,
+    back: CONSTANTS.states.back[device.value] || CONSTANTS.states.back.desktop,
+  })
+
+  const initialCfg = getConfig()
+
   const stateA = reactive({
-    pos: new Vector3(...CONSTANTS.states.front.pos),
-    rot: new Vector3(...CONSTANTS.states.front.rot),
-    scale: new Vector3(...CONSTANTS.states.front.scale),
+    pos: new Vector3(...initialCfg.front.pos as [number, number, number]),
+    rot: new Vector3(...initialCfg.front.rot as [number, number, number]),
+    scale: new Vector3(...initialCfg.front.scale as [number, number, number]),
     influence: { value: 1 },
   })
 
   const stateB = reactive({
-    pos: new Vector3(...CONSTANTS.states.back.pos),
-    rot: new Vector3(...CONSTANTS.states.back.rot),
-    scale: new Vector3(...CONSTANTS.states.back.scale),
+    pos: new Vector3(...initialCfg.back.pos as [number, number, number]),
+    rot: new Vector3(...initialCfg.back.rot as [number, number, number]),
+    scale: new Vector3(...initialCfg.back.scale as [number, number, number]),
     influence: { value: 0 },
+  })
+
+  // Watch device change to update positions responsively
+  watch(device, () => {
+    // Only update if not currently animating a swap
+    if (gsap.isTweening(stateA.pos)) return
+
+    const cfg = getConfig()
+    const targetA = !isSwapped.value ? cfg.front : cfg.back
+    const targetB = !isSwapped.value ? cfg.back : cfg.front
+
+    stateA.pos.set(...(targetA.pos as [number, number, number]))
+    stateA.rot.set(...(targetA.rot as [number, number, number]))
+    stateA.scale.set(...(targetA.scale as [number, number, number]))
+
+    stateB.pos.set(...(targetB.pos as [number, number, number]))
+    stateB.rot.set(...(targetB.rot as [number, number, number]))
+    stateB.scale.set(...(targetB.scale as [number, number, number]))
+    
+    if (invalidate) invalidate()
   })
 
   const offsetsA = reactive({
@@ -60,11 +90,12 @@ export function useArcadeInteraction(
   function swap() {
     if (gsap.isTweening(stateA.pos)) return
 
+    if (onInternalSwap) onInternalSwap()
+
     isSwapped.value = !isSwapped.value
 
     // Targets
-    const front = CONSTANTS.states.front
-    const back = CONSTANTS.states.back
+    const { front, back } = getConfig()
 
     const targetA = isSwapped.value
       ? { pos: back.pos, rot: back.rot, scale: back.scale, infl: 0 }
@@ -151,13 +182,15 @@ export function useArcadeInteraction(
 
   function handleHover(model: 'A' | 'B', over: boolean) {
     const isBack = (model === 'A' && isSwapped.value) || (model === 'B' && !isSwapped.value)
+    // console.log('Hover:', model, over, 'isBack:', isBack)
     if (over) {
       document.body.style.cursor = isBack ? 'pointer' : 'auto'
       if (isBack) {
         gsap.to(hoverState, {
-          [model]: 0.08,
-          duration: 0.4,
-          ease: 'elastic.out(1, 0.75)',
+          [model]: 0.25,
+          duration: 0.5,
+          ease: 'back.out(1.2)',
+          overwrite: true,
           onUpdate: () => { if (invalidate) invalidate() },
         })
       }
@@ -165,8 +198,9 @@ export function useArcadeInteraction(
       document.body.style.cursor = 'auto'
       gsap.to(hoverState, {
         [model]: 0,
-        duration: 0.3,
-        ease: 'power2.out',
+        duration: 0.4,
+        ease: 'power3.out',
+        overwrite: true,
         onUpdate: () => { if (invalidate) invalidate() },
       })
     }

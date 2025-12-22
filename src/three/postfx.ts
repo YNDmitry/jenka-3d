@@ -59,7 +59,7 @@ export function getPostFXSettings(params: {
       ? { strength: 0, threshold: 0.95, radius: 0, smaa: false }
       : quality === 'med'
         ? { strength: 0.08, threshold: 0.92, radius: 0.15, smaa: false }
-        : { strength: 0.15, threshold: 0.88, radius: 0.25, smaa: true }
+        : { strength: 0.15, threshold: 0.88, radius: 0.25, smaa: false }
 
   return {
     bloom: {

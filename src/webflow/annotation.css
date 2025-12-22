@@ -1,99 +1,177 @@
-.jenka-leader-tooltip {
+/* The Leader Line (SVG) */
+.hud-leader {
+  width: 60px;
+  height: 40px;
+  overflow: visible;
+  flex-shrink: 0;
+  z-index: 1;
+  /* Neon Glow */
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+}
+
+.hud-leader path {
+  fill: none;
+  stroke: white;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+  /* Drawing Animation setup */
+  stroke-dasharray: 120; /* Enough to cover the line length */
+  stroke-dashoffset: 120;
+  animation: drawLeader 0.4s cubic-bezier(0.23, 1, 0.32, 1) 0.1s forwards;
+}
+
+/* The Anchor Dot */
+.hud-leader circle {
+  fill: white;
+  opacity: 0;
+  transform-origin: 60px 0px;
+  animation:
+    fadeInDot 0.2s ease-out forwards,
+    pulseDot 2s infinite ease-in-out;
+}
+
+@keyframes drawLeader {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadeInDot {
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 2px white);
+  }
+  50% {
+    transform: scale(1.5);
+    filter: drop-shadow(0 0 8px white);
+  }
+}
+
+/* The Content Box using Border Image */
+.hud-box {
+  /* The Border Image Magic */
+  border: 16px solid transparent;
+  /* SVG (Wireframe only - No Fill) */
+  border-image-source: url('data:image/svg+xml;utf8,<svg width="202" height="75" viewBox="0 0 202 75" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="190.78" y="3.91444" width="2.53057" height="1.86403" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="-0.932017" y="0.932017" width="2.53057" height="1.86403" transform="matrix(-1 0 0 1 10.4426 2.98242)" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="-0.932017" y="0.932017" width="2.53057" height="1.86403" transform="matrix(-1 0 0 1 196.771 65.6138)" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="4.44764" y="66.5458" width="2.53057" height="1.86403" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="195.174" y="7.64247" width="2.53057" height="1.86403" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="-0.932017" y="0.932017" width="2.53057" height="1.86403" transform="matrix(-1 0 0 1 6.04612 6.71045)" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="-0.932017" y="0.932017" width="2.53057" height="1.86403" transform="matrix(-1 0 0 1 192.378 69.3423)" fill="%23232323" stroke="white" stroke-width="1.86403"/><rect x="8.84217" y="70.2743" width="2.53057" height="1.86403" fill="%23232323" stroke="white" stroke-width="1.86403"/><line x1="12.3066" y1="73.0698" x2="189.849" y2="73.0698" stroke="white" stroke-width="2.98245"/><line x1="12.3066" y1="1.49119" x2="189.849" y2="1.49119" stroke="white" stroke-width="2.98245"/><line x1="200.126" y1="8.94727" x2="200.126" y2="67.1051" stroke="white" stroke-width="2.98245"/><line x1="1.49123" y1="8.94727" x2="1.49122" y2="67.1051" stroke="white" stroke-width="2.98245"/></svg>');
+  border-image-slice: 20; /* No 'fill' - center is transparent */
+  border-image-width: 20px;
+  border-image-repeat: stretch;
+
+  /* Text Styles */
+  color: white;
+  font-family: 'Space Mono', monospace, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  position: relative;
+  min-width: 60px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden; /* For scanline */
+
+  /* Compensate for the border width taking up space */
+  padding: 0 10px;
+
+  /* Glow/Shadow */
+  filter: drop-shadow(0 0 10px rgba(0, 0, 0, 0.5));
+  animation: boxPulse 3s infinite ease-in-out;
+  z-index: 2;
+}
+
+/* Background Layer with Backdrop Blur and Shaped Corners */
+.hud-box::before {
+  content: '';
   position: absolute;
-  width: 322px; /* 768 * 0.42 */
-  height: 60px;  /* 144 * 0.42 */
+  /* Stretch to fill the frame (Inset by -18px to match the border visual edge) */
+  top: -18px;
+  bottom: -18px;
+  left: -18px;
+  right: -18px;
+
+  /* Cut the corners to match the tech frame shape */
+  clip-path: polygon(
+    10px 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    10px 100%,
+    0 calc(100% - 10px),
+    0 10px
+  );
+
+  z-index: -1;
+}
+
+.jenka-tech-hud {
+  position: absolute;
+  display: flex;
+  align-items: center;
   pointer-events: none;
   user-select: none;
+
+  /* Standard (Right-side HUD): Anchor at Left edge */
+  /* HTML is [Box][Leader]. We want [Leader][Box]. So row-reverse. */
+  flex-direction: row-reverse;
+  /* Left edge of container (Leader start) at 0,0 */
+  left: 0;
+  transform: translate(0, calc(-50% - 20px));
   opacity: 0;
-  animation: fadeInLeader 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-  /* Anchor: Top-Right tip at (0,0), so we shift left by 100% 
-     Shift up by -7% to start the leader line slightly above the center point */
-  transform: translate(-100%, -7%);
-  z-index: 1000;
+  animation: hudFadeIn 0.3s ease-out forwards;
 }
 
-.jenka-leader-tooltip.is-mirrored {
-  transform: translate(0, -7%);
-}
-
-.jenka-leader-tooltip.is-mirrored .leader-svg {
+/* Standard: Leader is visual Left. Anchor must be Left. */
+/* My SVG has Anchor Right (60). So we Flip. */
+.jenka-tech-hud .hud-leader {
   transform: scaleX(-1);
 }
 
-.leader-svg {
-  width: 100%;
-  height: 100%;
-  /* Stronger shadow for contrast on light backgrounds */
-  filter: drop-shadow(0 0 2px rgba(0,0,0,0.8)) drop-shadow(0 0 15px rgba(255, 255, 255, 0.4));
+.jenka-tech-hud.is-mirrored {
+  /* Mirrored (Left-side HUD): Anchor at Right edge */
+  /* HTML [Box][Leader]. We want [Box][Leader]. So row. */
+  flex-direction: row;
+  /* Right edge of container (Leader end) at 0,0 */
+  /* Shift left by 100% width */
+  transform: translate(-100%, calc(-50% - 20px));
 }
 
-.leader-label {
-  position: absolute;
-  /* (SVG Y=70.2) * 0.42 */
-  top: 29px;
-  /* (SVG X=12.3) * 0.42 */
-  left: 5px;
-  /* (SVG Box Width ~177.5) * 0.42 */
-  width: 75px;
-  /* (SVG Box Height ~71.6) * 0.42 */
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-family: 'Space Mono', monospace, sans-serif;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  /* Hard outline + Glow for maximum readability */
-  text-shadow: 
-    0 1px 2px rgba(0,0,0,0.8),
-    0 0 10px rgba(255,255,255,0.5);
-  /* Glass UI effect */
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
-  box-sizing: border-box;
+/* Mirrored: Leader is visual Right. Anchor must be Right. */
+/* SVG has Anchor Right. No Flip. */
+.jenka-tech-hud.is-mirrored .hud-leader {
+  transform: none;
 }
 
-.is-mirrored .leader-label {
-  left: auto;
-  right: 5px;
-}
-
-/* Hide on Tablet and Mobile (Webflow standard breakpoints) */
-@media (max-width: 991px) {
-  .jenka-leader-tooltip {
-    display: none !important;
+/* Animations adapted for translate */
+@keyframes hudFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(0, calc(-40% - 20px));
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, calc(-50% - 20px));
   }
 }
 
-@keyframes fadeInLeader {
-  from { 
-    opacity: 0; 
-    transform: translate(-100%, 10px) scale(0.9);
-    filter: blur(10px);
+@keyframes hudFadeInMirrored {
+  from {
+    opacity: 0;
+    transform: translate(-100%, calc(-40% - 20px));
   }
-  to { 
-    opacity: 1; 
-    transform: translate(-100%, 0) scale(1);
-    filter: blur(0);
+  to {
+    opacity: 1;
+    transform: translate(-100%, calc(-50% - 20px));
   }
 }
 
-.jenka-leader-tooltip.is-mirrored {
-  animation: fadeInLeaderMirrored 0.4s cubic-bezier(0.23, 1, 0.32, 1) forwards;
-}
-
-@keyframes fadeInLeaderMirrored {
-  from { 
-    opacity: 0; 
-    transform: translate(0, 10px) scale(0.9);
-    filter: blur(10px);
-  }
-  to { 
-    opacity: 1; 
-    transform: translate(0, 0) scale(1);
-    filter: blur(0);
-  }
+.jenka-tech-hud.is-mirrored {
+  animation: hudFadeInMirrored 0.3s ease-out forwards;
 }

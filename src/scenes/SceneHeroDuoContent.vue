@@ -110,9 +110,16 @@ watch(
 )
 
 // --- Interaction (Parallax) ---
+const cameraPos = computed(() => CONSTANTS.layout.camPos[props.device] || CONSTANTS.layout.camPos.desktop)
+
+const forceReducedMotion = computed(() => 
+  props.reducedMotion || props.device === 'mobile' || props.device === 'tablet'
+)
+
 useHeroInteraction(
   computed(() => props.active),
-  computed(() => props.reducedMotion),
+  computed(() => props.device),
+  forceReducedMotion,
   props.container,
   cameraRef,
   invalidate,
@@ -130,70 +137,66 @@ const shadowConfig = computed(() => {
 const stagePos = computed(() => {
   return CONSTANTS.layout.stagePos[props.device] || CONSTANTS.layout.stagePos.desktop
 })
+
+const modelConfigA = computed(() => CONSTANTS.models.a[props.device] || CONSTANTS.models.a.desktop)
+const modelConfigB = computed(() => CONSTANTS.models.b[props.device] || CONSTANTS.models.b.desktop)
 </script>
 
 <template>
   <TresPerspectiveCamera
     ref="cameraRef"
-    :position="CONSTANTS.layout.camPos"
+    :position="cameraPos"
     :fov="CONSTANTS.layout.fov"
     :look-at="CONSTANTS.layout.lookAt"
   />
 
-  <!-- СВЕТ: Studio Setup (Figma Match) -->
-  <TresAmbientLight :intensity="0.8" color="#ffffff" />
+  <!-- СВЕТ: Cinematic Tech Setup -->
+  <TresAmbientLight :intensity="0.3" color="#ffffff" />
 
-  <!-- Key Light: Soft directional from top-right -->
+  <!-- Key Light: Strong, slightly warm main source -->
   <TresDirectionalLight
     :position="[5, 5, 5]"
-    :intensity="2.0"
-    color="#ffffff"
+    :intensity="3.0"
+    color="#fff0dd"
     :cast-shadow="shadowConfig.cast"
     :shadow-bias="-0.0001"
     :shadow-mapSize-width="shadowConfig.size"
     :shadow-mapSize-height="shadowConfig.size"
   />
 
-  <!-- Fill Light: Left side filler -->
+  <!-- Fill Light: Soft cool fill from left -->
   <TresSpotLight
     :position="[-5, 5, 2]"
-    :intensity="2.0"
-    color="#e0e7ff"
+    :intensity="1.0"
+    color="#ccccff"
     :angle="0.6"
     :penumbra="1"
     :look-at="[0, 0, 0]"
   />
 
-  <!-- Rim Light: Subtle backlight separation -->
+  <!-- Rim Light: Strong blue kicker for silhouette -->
   <TresSpotLight
     :position="[0, 5, -5]"
-    :intensity="5.0"
-    color="#ffffff"
-    :angle="0.5"
-    :penumbra="1"
+    :intensity="8.0"
+    color="#44aaff"
+    :angle="0.6"
+    :penumbra="0.5"
     :look-at="[0, 0, 0]"
   />
 
   <TresGroup ref="stageRef" :position="stagePos">
-    <ContactShadows
-      :opacity="0.4"
-      :scale="10"
-      :blur="2.5"
-      :far="2"
-      :resolution="512"
-      :color="'#000000'"
-    />
     <primitive
       v-if="modelA"
       :object="modelA"
-      :position="CONSTANTS.models.a.pos"
-      :rotation="CONSTANTS.models.a.rot"
+      :position="modelConfigA.pos"
+      :rotation="modelConfigA.rot"
       @click="handleModelClick"
     />
     <primitive
       v-if="modelB"
       :object="modelB"
-      :rotation="CONSTANTS.models.b.rot"
+      :position="modelConfigB.pos"
+      :rotation="modelConfigB.rot"
       @click="handleModelClick"
     />
   </TresGroup>

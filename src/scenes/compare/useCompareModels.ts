@@ -3,7 +3,6 @@ import {
   Box3,
   Group,
   type Material,
-  type Mesh,
   type Object3D,
   type Texture,
   Vector3,
@@ -38,15 +37,6 @@ interface ModelAnalysis {
   interactables: InteractableItem[]
 }
 
-const MANUAL_OFFSETS: Record<string, [number, number, number]> = {
-  plane065: [0, -1, 0.0],
-  'plane.065': [0, 0.0, 0.0],
-  'cube.001': [0, 0, 0],
-  geosphere003: [0, 0, 0],
-  'geosphere.003': [0, 0, 0],
-  'action button': [0, 0.02, 0],
-}
-
 export function useCompareModels(
   config: WebflowSceneConfig,
   quality: QualityTier,
@@ -67,81 +57,15 @@ export function useCompareModels(
   const emissiveA = shallowRef<EmissiveEntry[]>([])
   const emissiveB = shallowRef<EmissiveEntry[]>([])
 
-  function analyzeModel(root: Object3D): ModelAnalysis {
+  function analyzeModel(): ModelAnalysis {
     const buttons: Object3D[] = []
     const speakers: Object3D[] = []
     const emissivesMap = new Map<string, EmissiveEntry>()
     const textures = new Set<Texture>()
     const interactablesList: InteractableItem[] = []
-    const tempVec = new Vector3()
 
-    root.traverse((obj) => {
-      if (obj.name) {
-        const lowerName = obj.name.toLowerCase()
-        let type: 'button' | null = null
-
-        const m = CONSTANTS.glints.matchers
-
-        const isButton = m.buttons.some(x => lowerName.includes(x))
-
-        if (isButton) {
-          buttons.push(obj as any)
-          type = 'button'
-        }
-
-        if (type) {
-          const box = new Box3().setFromObject(obj)
-          box.getCenter(tempVec)
-          tempVec.z += 0.02
-
-          if (MANUAL_OFFSETS[lowerName]) {
-            const [ox, oy, oz] = MANUAL_OFFSETS[lowerName]
-            tempVec.x += ox
-            tempVec.y += oy
-            tempVec.z += oz
-          }
-
-          interactablesList.push({
-            id: obj.uuid,
-            label: type === 'button' ? 'Action Button' : 'High-Fi Speaker',
-            position: [tempVec.x, tempVec.y, tempVec.z],
-            object: obj as any,
-            type,
-          })
-        }
-      }
-
-      const mesh = obj as Mesh
-      if (mesh.isMesh && mesh.material) {
-        const materials: Material[] = Array.isArray(mesh.material)
-          ? mesh.material
-          : [mesh.material]
-        for (const mat of materials) {
-          const anyMat = mat as any
-          if (anyMat.map) {
-            textures.add(anyMat.map)
-          }
-          if (anyMat.emissiveMap) {
-            textures.add(anyMat.emissiveMap)
-          }
-
-          if (emissivesMap.has(mat.uuid)) {
-            continue
-          }
-
-          if (
-            anyMat.emissiveMap ||
-            (anyMat.name && /screen|emiss|emit|neon|glow/i.test(anyMat.name))
-          ) {
-            const base =
-              typeof anyMat.emissiveIntensity === 'number'
-                ? anyMat.emissiveIntensity
-                : 1
-            emissivesMap.set(mat.uuid, { material: mat, base })
-          }
-        }
-      }
-    })
+    // Automatic traversal removed as requested.
+    // We only use custom hotspots defined in config.
 
     return {
       buttons,
@@ -213,7 +137,7 @@ export function useCompareModels(
               m.roughness = 0.15
             }
             if (m.metalness < 0.1) {
-              m.metalness = 0.4
+              m.metalness = 0.2
             }
             m.envMapIntensity = 4.0
             if (
@@ -236,8 +160,8 @@ export function useCompareModels(
       wrapperA.updateMatrixWorld(true)
       wrapperB.updateMatrixWorld(true)
 
-      const dataA = analyzeModel(sceneA)
-      const dataB = analyzeModel(sceneB)
+      const dataA = analyzeModel()
+      const dataB = analyzeModel()
 
       // Inject Custom Hotspots
       const addCustomHotspots = (
@@ -246,16 +170,18 @@ export function useCompareModels(
         data: ModelAnalysis,
       ) => {
         const list = CONSTANTS.customHotspots?.[key]
-        if (!list) return
+        if (!list) {
+          return
+        }
 
         list.forEach((def, idx) => {
           const dummy = new Group()
           dummy.name = `custom-hotspot-${key}-${idx}`
           dummy.position.set(...(def.pos as [number, number, number]))
-          
+
           // Add to scene so it moves with parent
           targetRoot.add(dummy)
-          
+
           // Register as interactable
           data.interactables.push({
             id: dummy.uuid,

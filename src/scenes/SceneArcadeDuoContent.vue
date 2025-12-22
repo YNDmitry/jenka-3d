@@ -20,6 +20,7 @@ import type {
   QualityTier,
   WebflowSceneConfig,
 } from '../shared/types'
+import { getPostFXSettings } from '../three/postfx'
 import { disposeObject3D } from '../three/dispose'
 
 import { CONSTANTS } from './arcade/config'
@@ -62,15 +63,8 @@ watch(
 )
 
 // --- Models ---
-const {
-  state,
-  errorMessage,
-  modelA,
-  modelB,
-  loadModels,
-  LAYER_A,
-  LAYER_B,
-} = useArcadeModels(renderer)
+const { state, modelA, modelB, loadModels, LAYER_A, LAYER_B } =
+  useArcadeModels(renderer)
 
 watch(state, (s) => emit('state', s))
 
@@ -105,33 +99,50 @@ const onInternalSwap = () => {
 }
 
 // --- Interaction (Swap & Parallax) ---
-const {
-  cameraPosition,
-  lightIntensity,
-  handleClick,
-  handleHover,
-  swap,
-} = useArcadeInteraction(
-  computed(() => props.active),
-  computed(() => props.reducedMotion),
-  props.container,
-  cameraRef,
-  modelA,
-  modelB,
-  invalidate,
-  onInternalSwap,
-)
+const { cameraPosition, lightIntensity, handleClick, handleHover, swap } =
+  useArcadeInteraction(
+    computed(() => props.active),
+    computed(() => props.device),
+    computed(() => props.reducedMotion),
+    props.container,
+    cameraRef,
+    modelA,
+    modelB,
+    invalidate,
+    onInternalSwap,
+  )
 
 // Watch external trigger (HTML click -> data-toggle -> prop -> swap)
-watch(() => props.trigger, () => {
-  if (isInternalUpdate.value) {
-    isInternalUpdate.value = false
-    return
-  }
-  swap()
-})
+watch(
+  () => props.trigger,
+  () => {
+    if (isInternalUpdate.value) {
+      isInternalUpdate.value = false
+      return
+    }
+    swap()
+  },
+)
 
 // --- Optimizations ---
+const postfx = computed(() =>
+  getPostFXSettings({
+    quality: props.quality,
+    bloomMultiplier: props.bloom,
+    reducedMotion: props.reducedMotion,
+  }),
+)
+
+const useComposer = computed(
+  () => postfx.value.bloom.enabled || postfx.value.smaa,
+)
+
+const multisampling = computed(() => {
+  // Balanced: 2x is sufficient to hide aliasing on most screens
+  if (useComposer.value && props.quality === 'high') return 2
+  return 0
+})
+
 const shadowConfig = computed(() => {
   if (props.quality === 'low') {
     return { cast: false, size: 512 }
@@ -143,11 +154,10 @@ const shadowConfig = computed(() => {
 })
 
 const stagePos = computed(() => {
-  return CONSTANTS.layout.stagePos[props.device] || CONSTANTS.layout.stagePos.desktop
+  return (
+    CONSTANTS.layout.stagePos[props.device] || CONSTANTS.layout.stagePos.desktop
+  )
 })
-
-const enableSmaa = computed(() => props.quality === 'high')
-const multisampling = computed(() => props.quality === 'high' ? 4 : 0)
 </script>
 
 <template>
@@ -170,31 +180,34 @@ const multisampling = computed(() => props.quality === 'high' ? 4 : 0)
       :object="modelA"
       @click="(e: any) => handleClick(e, 'A')"
       @pointer-enter="() => handleHover('A', true)"
+      @pointerenter="() => handleHover('A', true)"
       @pointer-leave="() => handleHover('A', false)"
+      @pointerleave="() => handleHover('A', false)"
     />
     <primitive
       v-if="modelB"
       :object="modelB"
       @click="(e: any) => handleClick(e, 'B')"
       @pointer-enter="() => handleHover('B', true)"
+      @pointerenter="() => handleHover('B', true)"
       @pointer-leave="() => handleHover('B', false)"
+      @pointerleave="() => handleHover('B', false)"
     />
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs :multisampling="multisampling">
+    <EffectComposerPmndrs v-if="useComposer" :multisampling="multisampling">
       <BloomPmndrs
-        :intensity="0.2"
-        :luminance-threshold="0.001"
-        :luminance-smoothing="0.3"
+        v-if="postfx.bloom.enabled"
+        :intensity="postfx.bloom.strength"
+        :luminance-threshold="postfx.bloom.threshold"
+        :luminance-smoothing="postfx.bloom.radius"
         mipmap-blur
       />
 
       <BrightnessContrastPmndrs :contrast="0.2" :brightness="0.01" />
 
-      <ToneMappingPmndrs :mode="ToneMappingMode.AGX" />
-
-      <SMAA v-if="enableSmaa" />
+      <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>
 </template>

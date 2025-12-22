@@ -36,10 +36,10 @@ function loop(now: number) {
     return
   }
 
-  // 1. BOOST MODE: Unlock FPS (but capped at 60 to save battery/heat)
+  // 1. BOOST MODE: Unlock FPS
   // If user interacted recently, we want smoothness, but not necessarily 120Hz/144Hz
   if (now < boostUntil) {
-    const boostFps = Math.min(60, getTargetFpsForQuality(props.quality))
+    const boostFps = Math.min(120, getTargetFpsForQuality(props.quality))
     const interval = 1000 / boostFps
     const delta = now - lastFrameTime
 

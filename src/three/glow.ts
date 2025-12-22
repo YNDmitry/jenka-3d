@@ -125,10 +125,13 @@ export function createAttachedGlints(
       color: new Color(color),
       blending: AdditiveBlending,
       transparent: true,
+      depthTest: false, // Always on top
       depthWrite: false,
+      toneMapped: false, // Don't let exposure affect it
       opacity: 0,
     })
     const sprite = new Sprite(mat)
+    sprite.renderOrder = 9999 // Draw last
     sprite.raycast = () => {} // Disable raycasting
 
     // Compensate for target scale so the glint is roughly 'size' in world units
@@ -166,6 +169,11 @@ export function createAttachedGlints(
       return
     }
     for (const g of glints) {
+      if (g.target.userData?.hideGlint) {
+        g.sprite.material.opacity = 0
+        continue
+      }
+
       const t = elapsed * g.speed + g.phase
 
       // "Blink" / Flash effect instead of smooth pulse
@@ -224,10 +232,13 @@ export function createGlints(options: GlintsOptions): GlintsController {
       color: new Color(color),
       blending: AdditiveBlending,
       transparent: true,
+      depthTest: false, // Always on top
       depthWrite: false,
+      toneMapped: false, // Don't let exposure affect it
       opacity: 0,
     })
     const sprite = new Sprite(mat)
+    sprite.renderOrder = 9999 // Draw last
     sprite.raycast = () => {} // Disable raycasting
     sprite.scale.setScalar(size)
 

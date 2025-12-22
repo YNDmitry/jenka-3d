@@ -26,15 +26,25 @@ export interface MaterialTweaksOptions {
 export function isLikelyScreenMaterial(name: string): boolean {
   const n = name.toLowerCase()
   return (
-    n.includes('screen')
-    || n.includes('display')
-    || n.includes('emiss')
-    || n.includes('emit')
-    || n.includes('neon')
-    || n.includes('glow')
-    || n.includes('led')
-    || n.includes('pink')
-    || n.includes('blue')
+    n.includes('screen') ||
+    n.includes('display') ||
+    n.includes('emiss') ||
+    n.includes('emit') ||
+    n.includes('neon') ||
+    n.includes('glow') ||
+    n.includes('led') ||
+    n.includes('pink') ||
+    n.includes('blue')
+  )
+}
+
+export function isLikelyGlassMaterial(name: string): boolean {
+  const n = name.toLowerCase()
+  return (
+    n.includes('glass') ||
+    n.includes('clear') ||
+    n.includes('transparent') ||
+    n.includes('lens')
   )
 }
 
@@ -72,7 +82,10 @@ function setTextureAnisotropy(
 /**
  * Uploads texture to GPU immediately to avoid frame drop on first visibility.
  */
-function uploadTexture(tex: Texture | null | undefined, renderer: WebGLRenderer | null) {
+function uploadTexture(
+  tex: Texture | null | undefined,
+  renderer: WebGLRenderer | null,
+) {
   if (tex && renderer) {
     renderer.initTexture(tex)
   }
@@ -137,7 +150,7 @@ export function optimizeModel(
       // 2. Filter Quality & GPU Upload
       setTextureAnisotropy(material.map, r, quality)
       setTextureAnisotropy(material.normalMap, r, quality)
-      
+
       // Upload to GPU now, not later
       uploadTexture(material.map, r)
       uploadTexture(material.emissiveMap, r)
@@ -151,9 +164,9 @@ export function optimizeModel(
       const screenish = isLikelyScreenMaterial(name)
 
       if (
-        material.emissiveMap
-        && material.emissive
-        && material.emissive instanceof Color
+        material.emissiveMap &&
+        material.emissive &&
+        material.emissive instanceof Color
       ) {
         if (material.emissive.equals(new Color(0x000000))) {
           material.emissive.setRGB(1, 1, 1)
@@ -161,11 +174,26 @@ export function optimizeModel(
       }
 
       if (material.emissiveMap || screenish) {
-        material.emissiveIntensity
-          = emissiveIntensity * (screenish ? screenNameBoost : 1)
+        const boost = screenish ? screenNameBoost : 1
+        material.emissiveIntensity = Math.max(
+          material.emissiveIntensity,
+          emissiveIntensity * boost,
+        )
       }
 
-      if (typeof material.envMapIntensity === 'number') {
+      // 4. Glass Tweaks
+      const glassish = isLikelyGlassMaterial(name)
+      if (glassish) {
+        material.transmission = 0
+        material.thickness = 0.5
+        material.ior = 1.5
+        material.roughness = 0.02
+        material.metalness = 0.0
+        material.transparent = true
+        material.envMapIntensity = Math.max(material.envMapIntensity, 2.0)
+      }
+
+      if (typeof material.envMapIntensity === 'number' && !glassish) {
         material.envMapIntensity = envMapIntensity
       }
 
@@ -176,7 +204,7 @@ export function optimizeModel(
 }
 
 export function diagnoseMaterials(root: Object3D): void {
-  const issues: Array<{ material: string, issue: string }> = []
+  const issues: Array<{ material: string; issue: string }> = []
 
   root.traverse((obj) => {
     const anyObj = obj as any
@@ -238,8 +266,7 @@ export function diagnoseMaterials(root: Object3D): void {
     }
     // eslint-disable-next-line no-console
     console.groupEnd?.()
-  }
-  else {
+  } else {
     // eslint-disable-next-line no-console
     console.log('[WebflowTresScenes][debug] Material diagnostics: OK')
   }
@@ -248,7 +275,9 @@ export function diagnoseMaterials(root: Object3D): void {
 function createDracoLoader(manager: LoadingManager): DRACOLoader {
   const draco = new DRACOLoader(manager)
   // Reverting to CDN for Webflow compatibility where local /draco/ is not available
-  draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/')
+  draco.setDecoderPath(
+    'https://www.gstatic.com/draco/versioned/decoders/1.5.7/',
+  )
   draco.setDecoderConfig({ type: 'js' })
   draco.preload()
   return draco
@@ -292,8 +321,7 @@ export async function loadGLTFWithTweaks(
   if (draco) {
     try {
       loader.setDRACOLoader(createDracoLoader(manager))
-    }
-    catch (err) {
+    } catch (err) {
       warnOnce(
         'draco-loader-failed',
         `[WebflowTresScenes] Draco init failed; loading without Draco: ${(err as Error).message}`,
@@ -302,7 +330,7 @@ export async function loadGLTFWithTweaks(
   }
 
   const gltf = await loader.loadAsync(url)
-  
+
   // Use the new enhanced optimizer
   optimizeModel(gltf.scene as any, {
     debug,
@@ -312,7 +340,7 @@ export async function loadGLTFWithTweaks(
     screenNameBoost,
     renderer,
   })
-  
+
   if (debug) {
     diagnoseMaterials(gltf.scene as any)
   }

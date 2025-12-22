@@ -1,17 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import gsap from 'gsap'
 import { SphereGeometry } from 'three'
 
 import {
-  BloomPmndrs as Bloom,
-  BrightnessContrastPmndrs as BrightnessContrast,
-  EffectComposerPmndrs as EffectComposer,
+  BloomPmndrs,
+  BrightnessContrastPmndrs,
+  EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
-  VignettePmndrs as Vignette,
 } from '@tresjs/post-processing'
-import { BlendFunction } from 'postprocessing'
 import { Environment, Html } from '@tresjs/cientos'
 
 import type {
@@ -23,7 +21,6 @@ import type {
 } from '../shared/types'
 
 import { damp } from '../shared/utils'
-import { createFallbackLightRig, hasLights } from '../three/lighting'
 import { createAttachedGlints } from '../three/glow'
 import { getPostFXSettings } from '../three/postfx'
 import { disposeObject3D } from '../three/dispose'
@@ -76,8 +73,6 @@ const {
   modelB,
   buttonsA,
   buttonsB,
-  speakersA,
-  speakersB,
   interactablesA,
   interactablesB,
   emissiveA,
@@ -99,6 +94,7 @@ const {
   fovNudge,
   lookAtRef,
   pointer,
+  drag,
   resetCamera,
   handlePointerDown,
   handleModelClick,
@@ -113,22 +109,34 @@ const {
   () => emitFromCanvas(),
 )
 
+const isDragging = computed(() => drag.isDragging.value)
+
+// Reset interaction if dragging starts
+watch(isDragging, (dragging) => {
+  if (dragging) {
+    onGlowLeave()
+  }
+})
+
 // --- Watch External Trigger ---
 const isInternalUpdate = ref(false)
 
-watch(() => props.trigger, () => {
-  // Guard: If we just updated locally, ignore the echo from Webflow
-  if (isInternalUpdate.value) {
-    isInternalUpdate.value = false
-    return
-  }
-  
-  if (internalMode.value === 'grid') {
-    handleModeChange('focus-b', false) // External trigger
-  } else {
-    handleModeChange('grid', false) // External trigger
-  }
-})
+watch(
+  () => props.trigger,
+  () => {
+    // Guard: If we just updated locally, ignore the echo from Webflow
+    if (isInternalUpdate.value) {
+      isInternalUpdate.value = false
+      return
+    }
+
+    if (internalMode.value === 'grid') {
+      handleModeChange('focus-b', false) // External trigger
+    } else {
+      handleModeChange('grid', false) // External trigger
+    }
+  },
+)
 
 // --- 4. Hotspots ---
 const {
@@ -165,7 +173,7 @@ function handleModeChange(newMode: CompareMode, internal = true) {
   const prev = internalMode.value
   internalMode.value = newMode
   emit('change-mode', newMode)
-  
+
   // Set attribute manually if internal (since Webflow didn't do it yet)
   // If external, Webflow likely already set it, but setting it again is harmless
   if (props.container) {
@@ -182,12 +190,11 @@ function handleModeChange(newMode: CompareMode, internal = true) {
 
   applyMode(newMode, !props.reducedMotion)
 
+  // Glow buttons logic: only show for the focused model
   glintsA?.setEnabled?.(newMode === 'focus-a')
   glintsB?.setEnabled?.(newMode === 'focus-b')
+
   if (newMode === 'grid') {
-    glintsA?.setEnabled?.(false)
-    glintsB?.setEnabled?.(false)
-    
     // Safety: Ensure visibility is restored in case fadeObject logic missed a frame
     if (modelA.value) modelA.value.visible = true
     if (modelB.value) modelB.value.visible = true
@@ -197,12 +204,6 @@ function handleModeChange(newMode: CompareMode, internal = true) {
 // --- 6. Effects ---
 let glintsA: ReturnType<typeof createAttachedGlints> | null = null
 let glintsB: ReturnType<typeof createAttachedGlints> | null = null
-
-const rig = createFallbackLightRig(1)
-const showRig = computed(() => {
-  if (!modelA.value || !modelB.value) return true
-  return !(hasLights(modelA.value) || hasLights(modelB.value))
-})
 
 const postfx = computed(() =>
   getPostFXSettings({
@@ -216,8 +217,7 @@ const useComposer = computed(
   () => postfx.value.bloom.enabled || postfx.value.smaa,
 )
 const multisampling = computed(() => {
-  // Optimization: 4x is too heavy for many devices. 2x is sufficient for high.
-  if (useComposer.value && props.quality === 'high') return 2
+  if (useComposer.value && props.quality === 'high') return 4
   return 0
 })
 
@@ -248,17 +248,17 @@ function handleHover(target: 'a' | 'b' | null) {
       x: s,
       y: s,
       z: s,
-      duration: 0.25,
-      ease: 'power2.out',
+      duration: 0.4,
+      ease: 'back.out(1.5)',
       overwrite: true,
     })
 
   if (target === 'a') {
-    animate(modelA.value, gridCfg.a.scale * 1.05)
+    animate(modelA.value, gridCfg.a.scale * 1.12)
     animate(modelB.value, gridCfg.b.scale)
   } else if (target === 'b') {
     animate(modelA.value, gridCfg.a.scale)
-    animate(modelB.value, gridCfg.b.scale * 1.05)
+    animate(modelB.value, gridCfg.b.scale * 1.12)
   } else {
     animate(modelA.value, gridCfg.a.scale)
     animate(modelB.value, gridCfg.b.scale)
@@ -293,8 +293,9 @@ watch(
       envIntensity: props.envIntensity,
     }).then(() => {
       const isDesktop = props.device === 'desktop'
-      
+
       const targetsA = [...buttonsA.value]
+      // Glints enabled
       glintsA =
         isDesktop && targetsA.length > 0
           ? createAttachedGlints({
@@ -314,11 +315,11 @@ watch(
             })
           : null
 
-      glintsA?.setEnabled?.(false)
-      glintsB?.setEnabled?.(false)
+      // Glints are disabled in Grid mode by default
+      glintsA?.setEnabled?.(mode.value === 'focus-a')
+      glintsB?.setEnabled?.(mode.value === 'focus-b')
 
       applyGridLayout()
-      applyMode(mode.value, false)
     })
   },
   { immediate: true, deep: true },
@@ -327,28 +328,21 @@ watch(
 watch(
   () => props.emissive,
   (newVal, oldVal) => {
-    const ratio = newVal / (oldVal || 0.001)
-    const update = (list: any[]) => list.forEach((e) => (e.base *= ratio))
+    const update = (list: any[]) =>
+      list.forEach((entry) => {
+        if (entry.material) {
+          // Обновляем базу (на случай пропорций)
+          // Но главное - обновляем сам материал:
+          entry.material.emissiveIntensity = newVal
+        }
+      })
     update(emissiveA.value)
     update(emissiveB.value)
   },
+  { immediate: true },
 )
 
-watch(
-  () => props.envIntensity,
-  (val) => {
-    const apply = (m: any) =>
-      m?.traverse((o: any) => {
-        if (o.isMesh && o.material) {
-          ;(Array.isArray(o.material) ? o.material : [o.material]).forEach(
-            (mat: any) => (mat.envMapIntensity = val),
-          )
-        }
-      })
-    apply(modelA.value)
-    apply(modelB.value)
-  },
-)
+// --- Render Loop ---
 
 watch(
   () => props.device,
@@ -362,26 +356,23 @@ watch(
 onBeforeRender(({ elapsed, delta }) => {
   if (!props.active || state.value !== 'ready') return
 
-  // Subtle environment rotation for "alive" reflections
-  if (scene.value?.environment) {
-    scene.value.environment.rotation += delta * 0.05
-  }
-
-  if (!props.reducedMotion) {
-    const pulse = 0.96 + 0.04 * Math.sin(elapsed * 1.0)
-    const update = (list: any[]) =>
-      list.forEach((e) => (e.material.emissiveIntensity = e.base * pulse))
-    update(emissiveA.value)
-    update(emissiveB.value)
-  }
-
   // Параллакс в Grid режиме
   if (stageRef.value) {
     if (mode.value === 'grid' && !props.reducedMotion) {
       const strength = CONSTANTS.controls.parallaxStrength
       const maxRot = 0.07 * strength
-      stageRef.value.rotation.y = damp(stageRef.value.rotation.y, pointer.value.x * maxRot, 4, delta)
-      stageRef.value.rotation.x = damp(stageRef.value.rotation.x, -pointer.value.y * maxRot * 0.7, 4, delta)
+      stageRef.value.rotation.y = damp(
+        stageRef.value.rotation.y,
+        pointer.value.x * maxRot,
+        4,
+        delta,
+      )
+      stageRef.value.rotation.x = damp(
+        stageRef.value.rotation.x,
+        -pointer.value.y * maxRot * 0.7,
+        4,
+        delta,
+      )
     } else {
       stageRef.value.rotation.x = damp(stageRef.value.rotation.x, 0, 4, delta)
       stageRef.value.rotation.y = damp(stageRef.value.rotation.y, 0, 4, delta)
@@ -411,23 +402,15 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   />
 
   <Suspense>
-    <Environment preset="city" :blur="0.5" :background-intensity="0.5" />
-  </Suspense>
-  <TresAmbientLight :intensity="0.5" />
-
-  <primitive v-if="showRig" :object="rig" />
-
-  <EffectComposer v-if="useComposer" :multisampling="multisampling">
-    <Bloom
-      v-if="postfx.bloom.enabled"
-      :intensity="postfx.bloom.strength"
-      :luminance-threshold="postfx.bloom.threshold"
-      :luminance-smoothing="postfx.bloom.radius"
+    <Environment
+      preset="city"
+      :blur="0.9"
+      :background="false"
     />
-    <BrightnessContrast :contrast="0.25" :brightness="0.01" />
-    <Vignette :offset="0.3" :darkness="0.5" />
-    <SMAA v-if="postfx.smaa" />
-  </EffectComposer>
+  </Suspense>
+
+  <!-- Lighting matched to ArcadeDuo -->
+  <TresAmbientLight :intensity="0.2" color="#ffffff" />
 
   <TresGroup ref="stageRef" :position="layout.stagePos">
     <!-- Group A -->
@@ -450,7 +433,12 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
             :geometry="glowGeom"
             :position="item.position"
             :scale="1.2"
-            @pointerenter="device === 'desktop' && mode === 'focus-a' && onGlowEnter(item)"
+            @pointerenter="
+              device === 'desktop' &&
+              mode === 'focus-a' &&
+              !isDragging &&
+              onGlowEnter(item)
+            "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-a')"
             @pointer-down="handlePointerDown"
@@ -461,15 +449,37 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
               v-if="activeInteraction === item.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
-              :center="true"
               :style="{ pointerEvents: 'none' }"
             >
               <div
-                class="jenka-leader-tooltip"
+                class="jenka-tech-hud"
                 :class="{ 'is-mirrored': item.position[0] < 0 }"
               >
-                <img src="/ui/hud-leader.svg" class="leader-svg" alt="" />
-                <div class="leader-label">{{ item.label }}</div>
+                <div class="hud-box">
+                  {{ item.label }}
+                </div>
+                <svg
+                  class="hud-leader"
+                  viewBox="0 0 60 40"
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d="M60 40 L50 40 L20 0 H0"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <g class="hud-marker">
+                    <circle cx="60" cy="40" r="1.5" fill="white" />
+                    <circle
+                      cx="60"
+                      cy="40"
+                      r="3.5"
+                      stroke="white"
+                      stroke-width="0.5"
+                      fill="none"
+                      opacity="0.6"
+                    />
+                  </g>
+                </svg>
               </div>
             </Html>
           </TresMesh>
@@ -497,7 +507,12 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
             :geometry="glowGeom"
             :position="item.position"
             :scale="1.2"
-            @pointerenter="device === 'desktop' && mode === 'focus-b' && onGlowEnter(item)"
+            @pointerenter="
+              device === 'desktop' &&
+              mode === 'focus-b' &&
+              !isDragging &&
+              onGlowEnter(item)
+            "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-b')"
             @pointer-down="handlePointerDown"
@@ -508,15 +523,37 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
               v-if="activeInteraction === item.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
-              :center="true"
               :style="{ pointerEvents: 'none' }"
             >
               <div
-                class="jenka-leader-tooltip"
+                class="jenka-tech-hud"
                 :class="{ 'is-mirrored': item.position[0] < 0 }"
               >
-                <img src="/ui/hud-leader.svg" class="leader-svg" alt="" />
-                <div class="leader-label">{{ item.label }}</div>
+                <div class="hud-box">
+                  {{ item.label }}
+                </div>
+                <svg
+                  class="hud-leader"
+                  viewBox="0 0 60 40"
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d="M60 40 L50 40 L20 0 H0"
+                    vector-effect="non-scaling-stroke"
+                  />
+                  <g class="hud-marker">
+                    <circle cx="60" cy="40" r="1.5" fill="white" />
+                    <circle
+                      cx="60"
+                      cy="40"
+                      r="3.5"
+                      stroke="white"
+                      stroke-width="0.5"
+                      fill="none"
+                      opacity="0.6"
+                    />
+                  </g>
+                </svg>
               </div>
             </Html>
           </TresMesh>
@@ -524,6 +561,19 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
       </primitive>
     </TresGroup>
   </TresGroup>
+
+  <Suspense>
+    <EffectComposerPmndrs :multisampling="multisampling">
+      <BloomPmndrs
+        :intensity="postfx.bloom.strength"
+        :luminance-threshold="postfx.bloom.threshold"
+        :luminance-smoothing="postfx.bloom.radius"
+        mipmap-blur
+      />
+      <BrightnessContrastPmndrs :contrast="0.2" :brightness="0.01" />
+      <SMAA v-if="postfx.smaa" />
+    </EffectComposerPmndrs>
+  </Suspense>
 </template>
 
 <style>

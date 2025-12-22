@@ -10,9 +10,9 @@ export function useCompareLayout(
   device: Ref<DeviceClass>,
 ) {
   const layout = ref({
-    camPos: [0, 0, CONSTANTS.layout.cameraZ] as [number, number, number],
+    camPos: [0, 0, CONSTANTS.layout.cameraZ[device.value] || CONSTANTS.layout.cameraZ.desktop] as [number, number, number],
     lookAt: [0, 0, 0] as [number, number, number],
-    stagePos: CONSTANTS.layout.stagePos as [number, number, number],
+    stagePos: (CONSTANTS.layout.stagePos[device.value] || CONSTANTS.layout.stagePos.desktop) as [number, number, number],
     fov: CONSTANTS.layout.baseFov,
     scale: 1.0,
   })
@@ -21,8 +21,6 @@ export function useCompareLayout(
     let cfg = CONSTANTS.grid.desktop
     if (deviceType === 'mobile') cfg = CONSTANTS.grid.mobile
     if (deviceType === 'tablet') cfg = CONSTANTS.grid.tablet
-
-    const isSmall = deviceType === 'mobile' || deviceType === 'tablet'
 
     return {
       a: {
@@ -35,7 +33,8 @@ export function useCompareLayout(
         scale: cfg.b.scale,
         rot: cfg.b.rot as [number, number, number],
       },
-      camZ: isSmall ? CONSTANTS.layout.cameraZMobile : CONSTANTS.layout.cameraZ,
+      camZ: CONSTANTS.layout.cameraZ[deviceType] || CONSTANTS.layout.cameraZ.desktop,
+      stagePos: CONSTANTS.layout.stagePos[deviceType] || CONSTANTS.layout.stagePos.desktop,
     }
   }
 
@@ -52,6 +51,8 @@ export function useCompareLayout(
       ease: 'power2.inOut',
       onUpdate: () => {
         layout.value.camPos[2] = cfg.camZ
+        // Cast to tuple to satisfy type checker
+        layout.value.stagePos = cfg.stagePos as [number, number, number]
       },
     })
 
@@ -112,7 +113,7 @@ export function useCompareLayout(
     const bg = isA ? modelB.value : modelA.value
 
     const dur = animate ? 0.8 : 0
-    const f = CONSTANTS.focus
+    const f = CONSTANTS.focus[device.value] || CONSTANTS.focus.desktop
 
     // Fade in target, Fade out background
     fadeObject(target, 1, dur)
