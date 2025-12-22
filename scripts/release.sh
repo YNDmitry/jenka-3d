@@ -1,53 +1,56 @@
 #!/bin/bash
 
-# 1. Проверка на наличие изменений
+# 1. Check for uncommitted changes
 if [[ -n $(git status -s) ]]; then
-  echo "⚠️  Есть незакоммиченные изменения. Сначала закоммитьте или спрячьте их."
+  echo "⚠️  There are uncommitted changes. Please commit or stash them first."
   exit 1
 fi
 
-# 2. Выбор типа обновления
-echo "Какое обновление выпускаем?"
-select type in "patch (1.0.0 -> 1.0.1)" "minor (1.0.0 -> 1.1.0)" "major (1.0.0 -> 2.0.0)"; do
-    case $type in
-        "patch") VERSION_TYPE="patch"; break;;
-        "minor") VERSION_TYPE="minor"; break;;
-        "major") VERSION_TYPE="major"; break;;
-        *) echo "Неверный выбор";;
-    esac
-done
+# 2. Select update type
+echo "Select update type:"
+echo "1) patch"
+echo "2) minor"
+echo "3) major"
+read -p "#? " choice
 
-echo "🚀 Начинаем релиз [$VERSION_TYPE]..."
+case $choice in
+    1) VERSION_TYPE="patch";;
+    2) VERSION_TYPE="minor";;
+    3) VERSION_TYPE="major";;
+    *) echo "Invalid choice"; exit 1;;
+esac
 
-# 3. Поднятие версии и сборка
+echo "🚀 Starting release [$VERSION_TYPE]..."
+
+# 3. Bump version and build
 npm version $VERSION_TYPE --no-git-tag-version
 NEW_VERSION=$(node -p "require('./package.json').version")
-echo "📦 Версия: v$NEW_VERSION"
+echo "📦 Version: v$NEW_VERSION"
 
-echo "🔨 Сборка библиотеки..."
+echo "🔨 Building library..."
 npm run build:lib
 
-# 4. Коммит в основную ветку (main)
-echo "💾 Коммит изменений..."
+# 4. Commit to main
+echo "💾 Committing changes..."
 git add .
 git commit -m "chore(release): v$NEW_VERSION"
 git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 
-# 5. Пуш в main
-echo "⬆️  Отправка исходного кода (main)..."
+# 5. Push to main
+echo "⬆️  Pushing source code (main)..."
 git push origin main --tags
 
-# 6. Деплой в ветку release (самое важное!)
-echo "🚀 Отправка сборки в ветку 'release'..."
-# Эта команда берет содержимое папки dist/lib и делает его корнем ветки release
+# 6. Deploy to release branch
+echo "🚀 Deploying build to 'release' branch..."
+# This command takes the content of dist/lib folder and makes it the root of the release branch
 git push origin `git subtree split --prefix dist/lib main`:release --force
 
 echo ""
-echo "✅ Успешно опубликовано!"
+echo "✅ Successfully published!"
 echo ""
-echo "🔗 ССЫЛКИ ДЛЯ WEBFLOW (ветка @release):"
+echo "🔗 WEBFLOW LINKS (@release branch):"
 echo "JS:  https://cdn.jsdelivr.net/gh/yndmitry/jenka-3d@release/jenka-3d.js"
 echo "CSS: https://cdn.jsdelivr.net/gh/yndmitry/jenka-3d@release/jenka-3d.css"
 echo ""
-echo "🧹 Сброс кеша (нажмите, если не обновилось):"
+echo "🧹 Purge Cache (click if not updating):"
 echo "https://purge.jsdelivr.net/gh/yndmitry/jenka-3d@release/jenka-3d.js"
