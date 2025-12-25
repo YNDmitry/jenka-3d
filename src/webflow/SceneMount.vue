@@ -62,7 +62,14 @@ const onSceneState = (next: LoaderState) => {
   
   console.log('[SceneMount] State:', next, 'Device:', device.value)
 
-  if (next === 'ready' && device.value === 'desktop') {
+  // Determine if we should reveal the canvas (fade out proxy).
+  // Hero/Arcade scenes strictly skip loading on mobile/tablet (relying on the static BG).
+  // Compare scenes load on all devices.
+  const shouldReveal = 
+    device.value === 'desktop' || 
+    props.config.scene === 'compare-duo'
+
+  if (next === 'ready' && shouldReveal) {
     console.log('[SceneMount] Fading out proxy')
     setTimeout(() => {
       proxyVisible.value = false
