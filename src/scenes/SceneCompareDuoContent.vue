@@ -229,16 +229,16 @@ const lightConfig = computed(() => {
   // Focus A: Key from Left, Fill from Right
   if (mode.value === 'focus-a') {
     return {
-      key: { pos: [-3.5, 5.0, 7.0], intensity: 2.5 * intensityMod },
-      fill: { pos: [5.0, 2.5, 4.0], intensity: 0.7 * intensityMod },
-      rim: { pos: [0.0, 4.0, -6.0], intensity: 2.0 * intensityMod },
+      key: { pos: [-3.5, 5.0, 7.0] as [number, number, number], intensity: 2.5 * intensityMod },
+      fill: { pos: [5.0, 2.5, 4.0] as [number, number, number], intensity: 0.7 * intensityMod },
+      rim: { pos: [0.0, 4.0, -6.0] as [number, number, number], intensity: 2.0 * intensityMod },
     }
   }
   // Focus B or Grid: Key from Right, Fill from Left (Standard)
   return {
-    key: { pos: [3.5, 5.5, 6.5], intensity: 2.5 * intensityMod },
-    fill: { pos: [-6.5, 2.5, 4.0], intensity: 0.6 * intensityMod },
-    rim: { pos: [0.0, 4.0, -6.0], intensity: 2.0 * intensityMod },
+    key: { pos: [3.5, 5.5, 6.5] as [number, number, number], intensity: 2.5 * intensityMod },
+    fill: { pos: [-6.5, 2.5, 4.0] as [number, number, number], intensity: 0.6 * intensityMod },
+    rim: { pos: [0.0, 4.0, -6.0] as [number, number, number], intensity: 2.0 * intensityMod },
   }
 })
 

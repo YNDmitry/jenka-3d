@@ -35,7 +35,7 @@ export function useHeroModels(
       isScreen?: boolean
     }
     const out: EmissiveEntry[] = []
-    root.traverse((obj) => {
+    root.traverse((obj: any) => {
       const anyObj = obj as any
       if (!anyObj?.isMesh) {
         return
@@ -72,11 +72,11 @@ export function useHeroModels(
     return out
   }
 
-  function collectRandomGlintTargets(root: Object3D, count = 12) {
+  function collectRandomGlintTargets(root: any, count = 12) {
     const candidates: Object3D[] = []
     
     // 1. Collect all valid meshes (exclude glass/screens)
-    root.traverse((obj) => {
+    root.traverse((obj: any) => {
       if ((obj as any).isMesh) {
         const name = obj.name.toLowerCase()
         if (
