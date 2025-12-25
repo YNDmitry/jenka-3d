@@ -57,7 +57,8 @@ export function guessQualityTier(): QualityTier {
   const memory = (navigator as any).deviceMemory as number | undefined
   const cores = navigator.hardwareConcurrency ?? 4
 
-  if (isMobileUA) { return 'low' }
+  // Modern phones are powerful. Default to 'med' instead of 'low'.
+  if (isMobileUA) { return 'med' }
   if (typeof memory === 'number' && memory <= 4) { return 'low' }
   if (cores <= 4) { return 'med' }
   return 'high'
