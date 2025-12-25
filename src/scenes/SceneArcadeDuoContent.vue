@@ -64,7 +64,7 @@ watch(
 
 // --- Models ---
 const { state, modelA, modelB, loadModels, LAYER_A, LAYER_B } =
-  useArcadeModels(renderer)
+  useArcadeModels(renderer, computed(() => props.device))
 
 watch(state, (s) => emit('state', s))
 

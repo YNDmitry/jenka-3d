@@ -1,11 +1,12 @@
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, type Ref } from 'vue'
 import type { Material, Mesh, Object3D } from 'three'
-import type { LoaderState, QualityTier } from '../../shared/types'
+import type { LoaderState, QualityTier, DeviceClass } from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
 import { disposeObject3D } from '../../three/dispose'
 
 export function useArcadeModels(
   renderer: any,
+  device: Ref<DeviceClass>,
 ) {
   const state = ref<LoaderState>('loading')
   const errorMessage = ref<string | null>(null)
@@ -73,6 +74,12 @@ export function useArcadeModels(
     emissive: number,
     envIntensity: number
   ): Promise<void> {
+    // Skip loading on mobile/tablet for performance/design
+    if (device.value === 'mobile' || device.value === 'tablet') {
+      state.value = 'ready'
+      return
+    }
+
     if (!urlA || !urlB) {
       errorMessage.value = 'Missing models in config'
       state.value = 'error'
