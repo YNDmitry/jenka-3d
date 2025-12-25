@@ -39,6 +39,10 @@ function parseConfig(el: HTMLElement): WebflowSceneConfig {
     modelA: safeUrl(ds.modelA || null),
     modelB: safeUrl(ds.modelB || null),
     hdr: safeUrl(ds.hdr || null),
+    hideSpinner: ds.hideSpinner !== undefined,
+    exposure: ds.exposure ? parseFloat(ds.exposure) : undefined,
+    bloom: ds.bloom ? parseFloat(ds.bloom) : undefined,
+    envIntensity: ds.envIntensity ? parseFloat(ds.envIntensity) : undefined,
   }
 }
 

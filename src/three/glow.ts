@@ -176,15 +176,18 @@ export function createAttachedGlints(
 
       const t = elapsed * g.speed + g.phase
 
-      // "Blink" / Flash effect instead of smooth pulse
-      // Using power of sine makes the peak sharper and the trough wider (mostly off)
-      const sine = Math.sin(t * 3.0) // Faster frequency
-      const pulse = ((sine + 1) * 0.5) ** 8.0 // Very sharp peaks
+      // "Chaotic" Sparkle Effect
+      // Combine two sine waves with prime number frequencies to reduce repetition pattern
+      const t1 = elapsed * g.speed + g.phase
+      const t2 = elapsed * (g.speed * 0.7) + (g.phase * 1.3)
+      
+      // Main pulse * slower modulator
+      const wave = Math.sin(t1 * 3.0) * (Math.sin(t2) * 0.5 + 0.5)
+      
+      // Sharpen the peaks
+      const pulse = Math.max(0, wave) ** 6.0 
 
-      // Random jitter for "broken/neon" feel? Optional.
-      // For now, just the sharp flash.
-
-      g.sprite.material.opacity = (0.2 + 0.8 * pulse) * opacity
+      g.sprite.material.opacity = (0.1 + 0.9 * pulse) * opacity
 
       const s = g.baseScale * (0.8 + 0.4 * pulse)
       g.sprite.scale.set(s, s, s)

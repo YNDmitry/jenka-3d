@@ -9,6 +9,7 @@ import {
   BrightnessContrastPmndrs,
   EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
+  ToneMappingPmndrs,
 } from '@tresjs/post-processing'
 import { Environment, Html } from '@tresjs/cientos'
 
@@ -217,19 +218,45 @@ const useComposer = computed(
   () => postfx.value.bloom.enabled || postfx.value.smaa,
 )
 const multisampling = computed(() => {
-  if (useComposer.value && props.quality === 'high') return 4
+  if (useComposer.value && props.quality === 'high') return 2
   return 0
+})
+
+const lightConfig = computed(() => {
+  const isMobile = props.device === 'mobile'
+  const intensityMod = isMobile ? 0.8 : 1.0
+
+  // Focus A: Key from Left, Fill from Right
+  if (mode.value === 'focus-a') {
+    return {
+      key: { pos: [-3.5, 5.0, 7.0], intensity: 2.5 * intensityMod },
+      fill: { pos: [5.0, 2.5, 4.0], intensity: 0.7 * intensityMod },
+      rim: { pos: [0.0, 4.0, -6.0], intensity: 2.0 * intensityMod },
+    }
+  }
+  // Focus B or Grid: Key from Right, Fill from Left (Standard)
+  return {
+    key: { pos: [3.5, 5.5, 6.5], intensity: 2.5 * intensityMod },
+    fill: { pos: [-6.5, 2.5, 4.0], intensity: 0.6 * intensityMod },
+    rim: { pos: [0.0, 4.0, -6.0], intensity: 2.0 * intensityMod },
+  }
 })
 
 const glowGeom = new SphereGeometry(0.1, 16, 16)
 
 // Hover Effect
 function handleHover(target: 'a' | 'b' | null) {
+  if (isDragging.value) return // Don't override cursor while dragging
+
   if (!modelA.value || !modelB.value) return
 
   // Cursor logic
   if (target) {
-    document.body.style.cursor = 'pointer'
+    if (mode.value === 'grid') {
+      document.body.style.cursor = 'pointer'
+    } else {
+      document.body.style.cursor = 'grab'
+    }
   } else {
     document.body.style.cursor = 'default'
   }
@@ -264,6 +291,16 @@ function handleHover(target: 'a' | 'b' | null) {
     animate(modelB.value, gridCfg.b.scale)
   }
 }
+
+// Watch drag state for cursor
+watch(isDragging, (dragging) => {
+  if (dragging) {
+    document.body.style.cursor = 'grabbing'
+    onGlowLeave()
+  } else {
+    document.body.style.cursor = 'grab'
+  }
+})
 
 // --- Lifecycle ---
 onMounted(() => {
@@ -403,14 +440,34 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
 
   <Suspense>
     <Environment
-      preset="city"
-      :blur="0.9"
+      preset="studio"
+      :blur="0.5"
       :background="false"
     />
   </Suspense>
 
-  <!-- Lighting matched to ArcadeDuo -->
-  <TresAmbientLight :intensity="0.2" color="#ffffff" />
+  <!-- Professional Studio Lighting -->
+  <TresAmbientLight :intensity="0.05" />
+  
+  <!-- Key Light: Main source -->
+  <TresDirectionalLight 
+    :position="lightConfig.key.pos" 
+    :intensity="lightConfig.key.intensity" 
+    cast-shadow 
+  />
+  
+  <!-- Fill Light: Softens shadows -->
+  <TresDirectionalLight 
+    :position="lightConfig.fill.pos" 
+    :intensity="lightConfig.fill.intensity" 
+    color="#bcd7ff" 
+  />
+  
+  <!-- Rim Light: Backlight for separation -->
+  <TresDirectionalLight 
+    :position="lightConfig.rim.pos" 
+    :intensity="lightConfig.rim.intensity" 
+  />
 
   <TresGroup ref="stageRef" :position="layout.stagePos">
     <!-- Group A -->
@@ -563,14 +620,16 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs :multisampling="multisampling">
+    <EffectComposerPmndrs v-if="useComposer" :multisampling="multisampling">
       <BloomPmndrs
+        v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
         :luminance-threshold="postfx.bloom.threshold"
         :luminance-smoothing="postfx.bloom.radius"
         mipmap-blur
       />
-      <BrightnessContrastPmndrs :contrast="0.2" :brightness="0.01" />
+      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
+      <ToneMappingPmndrs :exposure="1.0" />
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>

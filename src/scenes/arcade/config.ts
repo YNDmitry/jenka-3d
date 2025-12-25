@@ -11,13 +11,17 @@ export const CONSTANTS = {
   },
   states: {
     front: {
-      desktop: { pos: [0.2, 0, 0.4], rot: [0.4, -0.5, 0], scale: [1, 1, 1] },
+      desktop: {
+        pos: [0.2, 0, 0.4],
+        rot: [0.4, -0.5, -0.03],
+        scale: [1, 1, 1],
+      },
       tablet: { pos: [0.2, 0, 0.4], rot: [0.4, -0.5, 0], scale: [1, 1, 1] },
       mobile: { pos: [0.2, 0, 0.4], rot: [0.4, -0.5, 0], scale: [1, 1, 1] },
     },
     back: {
       desktop: {
-        pos: [0, 0.5, -1.0],
+        pos: [-0.15, 0.35, -0.8],
         rot: [0, 0.6, 0.3],
         scale: [0.9, 0.9, 0.9],
       },

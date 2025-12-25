@@ -1,21 +1,29 @@
-import { ref, shallowRef, watch, markRaw } from 'vue'
+import { ref, shallowRef, watch, markRaw, type Ref } from 'vue'
 import {
   type Object3D,
   SRGBColorSpace,
   type Mesh,
   type Material,
+  Box3,
 } from 'three'
-import type { LoaderState, QualityTier } from '../../shared/types'
+import type { LoaderState, QualityTier, DeviceClass } from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
 import { disposeObject3D } from '../../three/dispose'
 
 export function useHeroModels(
   renderer: any,
+  device: Ref<DeviceClass>,
 ) {
   const state = ref<LoaderState>('loading')
   const errorMessage = ref<string | null>(null)
   const modelA = shallowRef<Object3D | null>(null)
   const modelB = shallowRef<Object3D | null>(null)
+  const buttonsA = shallowRef<Object3D[]>([])
+  const buttonsB = shallowRef<Object3D[]>([])
+  const screensA = shallowRef<Material[]>([])
+  const screensB = shallowRef<Material[]>([])
+  const boundsA = shallowRef<Box3>(new Box3())
+  const boundsB = shallowRef<Box3>(new Box3())
 
   const LAYER_A = 11
   const LAYER_B = 12
@@ -64,6 +72,36 @@ export function useHeroModels(
     return out
   }
 
+  function collectRandomGlintTargets(root: Object3D, count = 12) {
+    const candidates: Object3D[] = []
+    
+    // 1. Collect all valid meshes (exclude glass/screens)
+    root.traverse((obj) => {
+      if ((obj as any).isMesh) {
+        const name = obj.name.toLowerCase()
+        if (
+          !name.includes('glass') &&
+          !name.includes('screen') &&
+          !name.includes('window') &&
+          !name.includes('display')
+        ) {
+          candidates.push(obj)
+        }
+      }
+    })
+
+    // 2. Pick random subset
+    const targets: Object3D[] = []
+    // Shuffle
+    for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    
+    // Take top N
+    return candidates.slice(0, count)
+  }
+
   async function loadModels(
     urlA: string | undefined,
     urlB: string | undefined,
@@ -71,6 +109,12 @@ export function useHeroModels(
     emissive: number,
     envIntensity: number
   ): Promise<void> {
+    // Skip loading on mobile/tablet for performance/design
+    if (device.value === 'mobile' || device.value === 'tablet') {
+      state.value = 'ready'
+      return
+    }
+
     if (!urlA || !urlB) {
       errorMessage.value = 'Missing models in config'
       state.value = 'error'
@@ -121,17 +165,53 @@ export function useHeroModels(
       enableLayerRecursive(sceneA, LAYER_A)
       enableLayerRecursive(sceneB, LAYER_B)
 
-      const polishMaterials = (obj: Object3D) => {
+      const polishMaterials = (obj: Object3D, targetScreens: Material[]) => {
         obj.traverse((child: any) => {
           if (child.isMesh && child.material) {
             const m = child.material
-            if (m.roughness > 0.1 && m.roughness < 0.6) {
-              m.roughness = 0.15
+            const name = m.name.toLowerCase()
+
+            // Protect Glass, Screens, and Lights by Name and Property
+            if (
+              name.includes('glass') ||
+              name.includes('window') ||
+              name.includes('screen') ||
+              name.includes('display') ||
+              name.includes('monitor') ||
+              name.includes('arcade') ||
+              name.includes('matrix') ||
+              name.includes('9_gms')
+            ) {
+               m.envMapIntensity = 0.2
+               m.roughness = 1.0 // No glare
+               m.metalness = 0.0
+               // High static emission for "On" state
+               if (!m.emissiveIntensity || m.emissiveIntensity < 1.0) m.emissiveIntensity = 0.6
+               m.needsUpdate = true
+               targetScreens.push(m)
+               return
             }
-            if (m.metalness < 0.1) {
-              m.metalness = 0.4
-            }
-            m.envMapIntensity = 4.0
+
+            if (
+              name.includes('button') ||
+              name.includes('button') ||
+              name.includes('joystick') ||
+              name.includes('stick') ||
+              name.includes('push') ||
+              m.transparent || 
+              m.opacity < 1.0 || 
+              (m.transmission && m.transmission > 0) || 
+              m.emissiveIntensity > 0.1 ||
+              m.roughness < 0.1 || // Skip already shiny things (Glass/Screens)
+              m.roughness >= 0.5   // Skip matte plastic/rubber (Buttons/Joysticks)
+            ) return
+
+            // Make it look like High Quality Powder Coated Metal
+            m.metalness = 0.8
+            m.roughness = 0.4
+            m.envMapIntensity = envIntensity
+            
+            // Deep Black Fix
             if (
               m.color &&
               m.color.r < 0.1 &&
@@ -140,16 +220,31 @@ export function useHeroModels(
             ) {
               m.color.setHex(0x000000)
             }
+            
+            m.needsUpdate = true
           }
         })
       }
-      polishMaterials(sceneA)
-      polishMaterials(sceneB)
+      
+      const foundScreensA: Material[] = []
+      const foundScreensB: Material[] = []
+      
+      polishMaterials(sceneA, foundScreensA)
+      polishMaterials(sceneB, foundScreensB)
+      
+      screensA.value = foundScreensA
+      screensB.value = foundScreensB
 
       // Pre-upload happens inside loadGLTFWithTweaks now via optimizeModel
       
       modelA.value = markRaw(gltfA.scene) as any
       modelB.value = markRaw(gltfB.scene) as any
+
+      buttonsA.value = collectRandomGlintTargets(sceneA)
+      buttonsB.value = collectRandomGlintTargets(sceneB)
+
+      boundsA.value = new Box3().setFromObject(sceneA)
+      boundsB.value = new Box3().setFromObject(sceneB)
 
       state.value = 'ready'
     } catch (err) {
@@ -164,6 +259,12 @@ export function useHeroModels(
     errorMessage,
     modelA,
     modelB,
+    buttonsA,
+    buttonsB,
+    screensA,
+    screensB,
+    boundsA,
+    boundsB,
     loadModels,
     LAYER_A,
     LAYER_B

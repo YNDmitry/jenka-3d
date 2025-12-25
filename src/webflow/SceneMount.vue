@@ -28,6 +28,8 @@ const trigger = ref(0) // Increments on toggle
 let mo: MutationObserver | null = null
 
 const size = ref({ width: 0, height: 0 })
+const windowWidth = ref(window.innerWidth)
+
 const isVisible = ref(true)
 const hasSize = computed(() => size.value.width > 2 && size.value.height > 2)
 const active = computed(() => isVisible.value && hasSize.value)
@@ -35,7 +37,7 @@ const active = computed(() => isVisible.value && hasSize.value)
 const reducedMotion = ref(prefersReducedMotion())
 
 const device = computed(() =>
-  getDeviceClassFromWidth(size.value.width || window.innerWidth),
+  getDeviceClassFromWidth(windowWidth.value),
 )
 
 const quality = computed<QualityTier>(() => {
@@ -43,16 +45,29 @@ const quality = computed<QualityTier>(() => {
   return resolveQualityTier('auto', fallback)
 })
 
-const exposure = 1.0
+const exposure = props.config.exposure ?? 0.6
 const emissive = 1.0
-const envIntensity = 1.0
-const bloom = 0.8
+const envIntensity = props.config.envIntensity ?? 0.5
+const bloom = props.config.bloom ?? 0.2
 const background = false
 
+const bgStyle = ref<Record<string, string>>({})
+const proxyVisible = ref(true)
+
 const state = ref<LoaderState>('loading')
+
 const onSceneState = (next: LoaderState) => {
   state.value = next
   props.container.dataset.tresState = next
+  
+  console.log('[SceneMount] State:', next, 'Device:', device.value)
+
+  if (next === 'ready' && device.value === 'desktop') {
+    console.log('[SceneMount] Fading out proxy')
+    setTimeout(() => {
+      proxyVisible.value = false
+    }, 50)
+  }
 }
 
 const sceneComponent = computed(() => {
@@ -62,14 +77,34 @@ const sceneComponent = computed(() => {
 })
 
 let rmListener: ((e: MediaQueryListEvent) => void) | null = null
+let resizeListener: (() => void) | null = null
 
 onMounted(() => {
   props.container.dataset.tresState = state.value
+
+  // Capture Webflow background
+  const style = window.getComputedStyle(props.container)
+  if (style.backgroundImage && style.backgroundImage !== 'none') {
+    bgStyle.value = {
+      backgroundImage: style.backgroundImage,
+      backgroundSize: style.backgroundSize,
+      backgroundPosition: style.backgroundPosition,
+      backgroundRepeat: style.backgroundRepeat,
+    }
+    // Hide original immediately so proxy takes over
+    props.container.style.backgroundImage = 'none'
+  }
 
   SharedObserver.observeResize(props.container, (entry) => {
     const { width, height } = entry.contentRect
     size.value = { width, height }
   })
+
+  // Track window width for breakpoints
+  resizeListener = () => {
+    windowWidth.value = window.innerWidth
+  }
+  window.addEventListener('resize', resizeListener)
 
   SharedObserver.observeIntersection(props.container, (entry) => {
     isVisible.value = entry.isIntersecting
@@ -95,12 +130,16 @@ onUnmounted(() => {
   mo?.disconnect()
   SharedObserver.unobserveResize(props.container)
   SharedObserver.unobserveIntersection(props.container)
+  
+  if (resizeListener) {
+    window.removeEventListener('resize', resizeListener)
+  }
 
   const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
   if (mq && rmListener) { mq.removeEventListener?.('change', rmListener) }
 })
 
-const dpr = computed<[number, number]>(() => [1, Math.min(window.devicePixelRatio, 1.5)])
+const dpr = computed<[number, number]>(() => [1, Math.min(window.devicePixelRatio, 2.5)])
 
 // Static container style
 const containerStyle = {
@@ -115,10 +154,17 @@ const containerStyle = {
     class="scene-wrapper" 
     :style="containerStyle"
   >
+    <div 
+      class="bg-proxy" 
+      :style="bgStyle" 
+      :class="{ 'fade-out': !proxyVisible }"
+    ></div>
+
     <Transition name="fade">
       <div v-if="state === 'loading'" class="tres-loader">
-        <div class="tech-spinner">
+        <div v-if="!config.hideSpinner" class="tech-spinner">
           <div class="tech-spinner-dot"></div>
+          <div class="tech-spinner-ring"></div>
         </div>
       </div>
     </Transition>

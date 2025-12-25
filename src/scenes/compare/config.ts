@@ -7,12 +7,12 @@ export const CONSTANTS = {
     baseFov: 35,
     cameraZ: {
       desktop: 4.4,
-      tablet: 4,
-      mobile: 7,
+      tablet: 4.6,
+      mobile: 8,
     },
     stagePos: {
       desktop: [0, -0.9, 0],
-      tablet: [0, -0.9, 0],
+      tablet: [0, -0.75, 0],
       mobile: [0, -0.3, 0],
     },
   },
@@ -36,7 +36,7 @@ export const CONSTANTS = {
       background: { pos: [0, 0, -1], scale: 0.8, rot: [0, 0, 0] },
     },
     tablet: {
-      target: { pos: [0, 0, 0], scale: 0.9, rot: [0, 0, 0] },
+      target: { pos: [0, 0, 0], scale: 1.1, rot: [0, 0, 0] },
       background: { pos: [0, 0, -1], scale: 0.7, rot: [0, 0, 0] },
     },
     mobile: {
@@ -62,7 +62,7 @@ export const CONSTANTS = {
         type: 'button',
       },
       { label: 'Bill validator', pos: [-0, 0.55, 0.2], type: 'button' },
-      { label: 'Card reader', pos: [0.19, 0.72, 0.2], type: 'button' },
+      { label: 'Scanner', pos: [0.19, 0.72, 0.2], type: 'button' },
       { label: 'LED push button', pos: [0.22, 0.91, 0.16], type: 'button' },
       { label: 'LED push button', pos: [-0.22, 0.91, 0.16], type: 'button' },
       { label: 'Joystick', pos: [0.01, 0.94, 0.16], type: 'button' },
@@ -72,7 +72,7 @@ export const CONSTANTS = {
       { label: 'LED push button', pos: [0.15, 0.91, 0.18], type: 'button' },
       { label: 'LED push button', pos: [-0.15, 0.91, 0.18], type: 'button' },
       { label: 'Bill validator', pos: [0.1, 1.05, 0.1], type: 'button' },
-      { label: 'Card reader', pos: [0.2, 1.05, 0.1], type: 'button' },
+      { label: 'Scanner', pos: [0.2, 1.05, 0.1], type: 'button' },
       {
         label: 'FullHD touch display',
         pos: [0, 1.5, 0],

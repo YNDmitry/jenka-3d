@@ -7,7 +7,7 @@ export const CONSTANTS = {
     },
     lookAt: [0, 0, 0] as [number, number, number],
     stagePos: {
-      desktop: [-0.5, -1.46, 0] as [number, number, number],
+      desktop: [-0.4, -1.46, 0] as [number, number, number],
       tablet: [-0.5, -1.46, 0] as [number, number, number],
       mobile: [-0.5, -1.46, 0] as [number, number, number],
     },
@@ -19,12 +19,12 @@ export const CONSTANTS = {
   },
   models: {
     a: {
-      desktop: { pos: [0.65, 0.2, 0.2], rot: [0, -0.9, 0] },
+      desktop: { pos: [0.65, 0.2, 0.2], rot: [0, -0.8, 0] },
       tablet: { pos: [0.65, 0.2, 0.2], rot: [0, -0.9, 0] },
       mobile: { pos: [0.65, 0.2, 0.2], rot: [0, -0.9, 0] },
     },
     b: {
-      desktop: { pos: [0, 0, 0], rot: [0, -0.6, 0] },
+      desktop: { pos: [0.05, 0.1, 0], rot: [0, -0.5, 0] },
       tablet: { pos: [0, 0, 0], rot: [0, -0.6, 0] },
       mobile: { pos: [0, 0, 0], rot: [0, -0.6, 0] },
     },

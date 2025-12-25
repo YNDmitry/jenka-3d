@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TresCanvas } from '@tresjs/core'
-import { NoToneMapping, SRGBColorSpace } from 'three'
+import { LinearSRGBColorSpace, NoToneMapping, SRGBColorSpace } from 'three'
 import RenderDriver from '../three/RenderDriver.vue'
 import SceneHeroDuoContent from './SceneHeroDuoContent.vue'
 import type {
@@ -41,7 +41,7 @@ const onState = (s: LoaderState) => emit('state', s)
     :dpr="props.dpr || [1, 2]"
     :antialias="false"
     :tone-mapping="NoToneMapping"
-    :output-color-space="SRGBColorSpace"
+    :output-color-space="LinearSRGBColorSpace"
     :use-legacy-lights="false"
     preset="realistic"
   >

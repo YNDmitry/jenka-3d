@@ -18,6 +18,11 @@ export interface WebflowSceneConfig {
   modelB?: string
 
   hdr?: string
+  hideSpinner?: boolean
+  
+  exposure?: number
+  bloom?: number
+  envIntensity?: number
 }
 
 export interface MountedSceneInstance {

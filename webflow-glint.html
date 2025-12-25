@@ -1,0 +1,88 @@
+<!-- WEBFLOW GLINT SCRIPT -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+
+<script>
+  ;(function () {
+    function createGlintImage() {
+      const size = 128
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+
+      const cx = size / 2
+      const cy = size / 2
+
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2)
+      g.addColorStop(0, 'rgba(255,255,255,1)')
+      g.addColorStop(0.15, 'rgba(255,255,255,0.6)')
+      g.addColorStop(0.5, 'rgba(255,255,255,0.1)')
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(0, 0, size, size)
+
+      ctx.save()
+      ctx.translate(cx, cy)
+      ctx.beginPath()
+      ctx.moveTo(-size * 0.4, 0)
+      ctx.bezierCurveTo(-size * 0.1, -1, size * 0.1, -1, size * 0.4, 0)
+      ctx.bezierCurveTo(size * 0.1, 1, -size * 0.1, 1, -size * 0.4, 0)
+      ctx.moveTo(0, -size * 0.4)
+      ctx.bezierCurveTo(-1, -size * 0.1, -1, size * 0.1, 0, size * 0.4)
+      ctx.bezierCurveTo(1, size * 0.1, 1, -size * 0.1, 0, -size * 0.4)
+      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      ctx.fill()
+      ctx.restore()
+
+      const img = document.createElement('img')
+      img.src = canvas.toDataURL()
+      img.style.position = 'absolute'
+      img.style.pointerEvents = 'none'
+      img.style.userSelect = 'none'
+      img.style.zIndex = '9999'
+      img.style.width = '120px'
+      img.style.height = '120px'
+      img.style.opacity = '0.9'
+      img.style.mixBlendMode = 'screen'
+
+      return img
+    }
+
+    function addGlint(targetSelector, x, y, options = {}) {
+      const container = document.querySelector(targetSelector) || document.body
+
+      if (getComputedStyle(container).position === 'static') {
+        container.style.position = 'relative'
+      }
+
+      const glint = createGlintImage()
+
+      glint.style.left = x
+      glint.style.top = y
+      glint.style.transform = 'translate(-50%, -50%)'
+
+      container.appendChild(glint)
+
+      // Animation settings
+      const delay = options.delay || 0
+      const duration = options.duration || 1.5
+
+      if (window.gsap) {
+        gsap.to(glint, {
+          opacity: 0.4,
+          scale: 0.7,
+          duration: duration,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+          delay: delay,
+        })
+      }
+    }
+
+    // --- CONFIGURATION ---
+    addGlint('.your-scene-wrapper', '20%', '30%', { delay: 0 })
+    addGlint('.your-scene-wrapper', '80%', '60%', { delay: 0.5 })
+  })()
+</script>

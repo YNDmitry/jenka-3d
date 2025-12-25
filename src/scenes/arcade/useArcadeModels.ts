@@ -119,13 +119,47 @@ export function useArcadeModels(
         obj.traverse((child: any) => {
           if (child.isMesh && child.material) {
             const m = child.material
-            if (m.roughness > 0.1 && m.roughness < 0.6) {
-              m.roughness = 0.15
+            const name = m.name.toLowerCase()
+
+            // Protect Glass, Screens, and Lights by Name and Property
+            if (
+              name.includes('glass') ||
+              name.includes('window') ||
+              name.includes('screen') ||
+              name.includes('display') ||
+              name.includes('monitor') ||
+              name.includes('arcade') ||
+              name.includes('matrix') ||
+              name.includes('9_gms')
+            ) {
+               m.envMapIntensity = 0.1
+               m.roughness = 1.0 // No glare
+               m.metalness = 0.0
+               // High static emission for "On" state
+               if (!m.emissiveIntensity || m.emissiveIntensity < 1.0) m.emissiveIntensity = 0.6
+               m.needsUpdate = true
+               return
             }
-            if (m.metalness < 0.1) {
-              m.metalness = 0.4
-            }
-            m.envMapIntensity = 4.0
+
+            if (
+              name.includes('button') ||
+              name.includes('joystick') ||
+              name.includes('stick') ||
+              name.includes('push') ||
+              m.transparent || 
+              m.opacity < 1.0 || 
+              (m.transmission && m.transmission > 0) || 
+              m.emissiveIntensity > 0.1 ||
+              m.roughness < 0.1 || 
+              m.roughness >= 0.5
+            ) return
+
+            // Make it look like High Quality Powder Coated Metal
+            m.metalness = 0.8
+            m.roughness = 0.4
+            m.envMapIntensity = envIntensity
+            
+            // Deep Black Fix
             if (
               m.color &&
               m.color.r < 0.1 &&
@@ -134,6 +168,8 @@ export function useArcadeModels(
             ) {
               m.color.setHex(0x000000)
             }
+            
+            m.needsUpdate = true
           }
         })
       }

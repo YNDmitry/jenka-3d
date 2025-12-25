@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import { ContactShadows, Environment } from '@tresjs/cientos'
 import {
   BloomPmndrs,
+  BrightnessContrastPmndrs,
   EffectComposerPmndrs,
   SMAA,
   ToneMappingPmndrs,
 } from '@tresjs/post-processing'
 import { ToneMappingMode } from 'postprocessing'
-import { SRGBColorSpace } from 'three'
+import { SRGBColorSpace, Vector3 } from 'three'
 
 import type { PerspectiveCamera } from 'three'
 import type {
@@ -24,6 +25,7 @@ import { useHeroModels } from './hero/useHeroModels'
 import { useHeroInteraction } from './hero/useHeroInteraction'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
 import { useShadowBaking } from '../three/utils'
+import { createAttachedGlints } from '../three/glow'
 
 const props = defineProps<{
   container?: HTMLElement
@@ -65,7 +67,7 @@ const cameraRef = shallowRef<PerspectiveCamera | null>(null)
 const stageRef = shallowRef<any>(null)
 
 const { renderer, invalidate } = useTres()
-const { start, stop } = useLoop()
+const { start, stop, onBeforeRender } = useLoop()
 
 watch(
   () => props.active,
@@ -81,7 +83,11 @@ const {
   loadModels,
   LAYER_A,
   LAYER_B,
-} = useHeroModels(renderer)
+  buttonsA,
+  buttonsB,
+  screensA,
+  screensB,
+} = useHeroModels(renderer, computed(() => props.device))
 
 watch(state, (s) => emit('state', s))
 
@@ -108,6 +114,49 @@ watch(
   },
   { immediate: true },
 )
+
+// --- Glints ---
+let glintsA: ReturnType<typeof createAttachedGlints> | null = null
+let glintsB: ReturnType<typeof createAttachedGlints> | null = null
+
+watch(
+  [buttonsA, buttonsB, () => props.quality],
+  () => {
+    if (glintsA) glintsA.dispose()
+    if (glintsB) glintsB.dispose()
+
+    if (props.quality === 'low') return
+
+    if (buttonsA.value.length) {
+      glintsA = createAttachedGlints({
+        targets: buttonsA.value,
+        opacity: 0.9,
+        size: 0.15,
+      })
+    }
+    if (buttonsB.value.length) {
+      glintsB = createAttachedGlints({
+        targets: buttonsB.value,
+        opacity: 0.9,
+        size: 0.15,
+      })
+    }
+  },
+  { immediate: true }
+)
+
+onUnmounted(() => {
+  glintsA?.dispose()
+  glintsB?.dispose()
+})
+
+// --- Render Loop ---
+onBeforeRender(({ elapsed }) => {
+  if (!props.active) return
+  
+  glintsA?.update(elapsed)
+  glintsB?.update(elapsed + 0.5) // Offset phase
+})
 
 // --- Interaction (Parallax) ---
 const cameraPos = computed(() => CONSTANTS.layout.camPos[props.device] || CONSTANTS.layout.camPos.desktop)
@@ -150,38 +199,39 @@ const modelConfigB = computed(() => CONSTANTS.models.b[props.device] || CONSTANT
     :look-at="CONSTANTS.layout.lookAt"
   />
 
-  <!-- СВЕТ: Cinematic Tech Setup -->
-  <TresAmbientLight :intensity="0.3" color="#ffffff" />
+  <Suspense>
+    <Environment
+      preset="studio"
+      :blur="0.5"
+      :background="false"
+    />
+  </Suspense>
 
-  <!-- Key Light: Strong, slightly warm main source -->
-  <TresDirectionalLight
-    :position="[5, 5, 5]"
-    :intensity="3.0"
-    color="#fff0dd"
-    :cast-shadow="shadowConfig.cast"
-    :shadow-bias="-0.0001"
-    :shadow-mapSize-width="shadowConfig.size"
-    :shadow-mapSize-height="shadowConfig.size"
+  <!-- Professional Studio Lighting -->
+  <TresAmbientLight :intensity="0.01" />
+  
+  <!-- Key Light: Main source -->
+  <TresDirectionalLight 
+    :position="[3.5, 5.5, 6.5]" 
+    :intensity="1.0" 
+    cast-shadow 
   />
+  
+  <!-- Fill Light: Softens shadows -->
+  <TresDirectionalLight :position="[-6.5, 2.5, 4.0]" :intensity="0.1" color="#bcd7ff" />
+  
+  <!-- Rim Light: Backlight for separation -->
+  <TresDirectionalLight :position="[0.0, 4.0, -6.0]" :intensity="0.5" />
 
-  <!-- Fill Light: Soft cool fill from left -->
+  <!-- Accent Light: Premium Violet Underglow -->
   <TresSpotLight
-    :position="[-5, 5, 2]"
-    :intensity="1.0"
-    color="#ccccff"
-    :angle="0.6"
-    :penumbra="1"
-    :look-at="[0, 0, 0]"
-  />
-
-  <!-- Rim Light: Strong blue kicker for silhouette -->
-  <TresSpotLight
-    :position="[0, 5, -5]"
-    :intensity="8.0"
-    color="#44aaff"
-    :angle="0.6"
-    :penumbra="0.5"
-    :look-at="[0, 0, 0]"
+    :position="[0.0, -3.0, 3.0]"
+    :intensity="15.0"
+    color="#FF4AFF"
+    :angle="1.0"
+    :penumbra="1.0"
+    :look-at="[0.0, -1.0, 0]"
+    cast-shadow
   />
 
   <TresGroup ref="stageRef" :position="stagePos">
@@ -204,12 +254,13 @@ const modelConfigB = computed(() => CONSTANTS.models.b[props.device] || CONSTANT
   <Suspense>
     <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        :intensity="0.5"
+        :intensity="props.bloom"
         :luminance-threshold="1.1"
         :luminance-smoothing="0.3"
         mipmap-blur
       />
-      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" />
+      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
+      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="props.exposure" />
       <SMAA v-if="quality === 'high'" />
     </EffectComposerPmndrs>
   </Suspense>

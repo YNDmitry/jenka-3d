@@ -169,10 +169,39 @@ const stagePos = computed(() => {
   />
 
   <Suspense>
-    <Environment preset="city" :blur="0.9" :background="false" />
+    <Environment
+      preset="studio"
+      :blur="0.5"
+      :background="false"
+    />
   </Suspense>
 
-  <TresAmbientLight :intensity="0.2" color="#ffffff" />
+  <!-- Professional Studio Lighting -->
+  <TresAmbientLight :intensity="0.01" />
+  
+  <!-- Key Light: Main source -->
+  <TresDirectionalLight 
+    :position="[3.5, 5.5, 6.5]" 
+    :intensity="1.0" 
+    cast-shadow 
+  />
+  
+  <!-- Fill Light: Softens shadows -->
+  <TresDirectionalLight :position="[-6.5, 2.5, 4.0]" :intensity="0.1" color="#bcd7ff" />
+  
+  <!-- Rim Light: Backlight for separation -->
+  <TresDirectionalLight :position="[0.0, 4.0, -6.0]" :intensity="0.5" />
+
+  <!-- Accent Light: Premium Violet Underglow -->
+  <TresSpotLight
+    :position="[0.0, -3.0, 3.0]"
+    :intensity="15.0"
+    color="#FF4AFF"
+    :angle="1.0"
+    :penumbra="1.0"
+    :look-at="[0.0, -1.0, 0]"
+    cast-shadow
+  />
 
   <TresGroup ref="stageRef" :position="stagePos">
     <primitive
@@ -196,18 +225,16 @@ const stagePos = computed(() => {
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs v-if="useComposer" :multisampling="multisampling">
+    <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        v-if="postfx.bloom.enabled"
-        :intensity="postfx.bloom.strength"
-        :luminance-threshold="postfx.bloom.threshold"
-        :luminance-smoothing="postfx.bloom.radius"
+        :intensity="props.bloom"
+        :luminance-threshold="1.1"
+        :luminance-smoothing="0.3"
         mipmap-blur
       />
-
-      <BrightnessContrastPmndrs :contrast="0.2" :brightness="0.01" />
-
-      <SMAA v-if="postfx.smaa" />
+      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
+      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="props.exposure" />
+      <SMAA v-if="quality === 'high'" />
     </EffectComposerPmndrs>
   </Suspense>
 </template>

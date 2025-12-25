@@ -4,6 +4,21 @@ import glsl from 'vite-plugin-glsl'
 import { templateCompilerOptions } from '@tresjs/core'
 import { resolve } from 'node:path'
 
+const printWebflowScripts = () => ({
+  name: 'print-webflow-scripts',
+  configureServer(server) {
+    server.httpServer?.on('listening', () => {
+      const address = server.httpServer?.address()
+      const port = typeof address === 'string' ? address : address?.port
+      const protocol = server.config.server.https ? 'https' : 'http'
+      
+      console.log('\n  🔌 Webflow Dev Scripts (Paste into Project Settings -> Custom Code -> Footer):')
+      console.log(`  <script type="module" src="${protocol}://localhost:${port}/src/webflow/boot.ts"></script>`)
+      console.log('  (CSS is injected automatically in dev mode)\n')
+    })
+  }
+})
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -11,6 +26,7 @@ export default defineConfig(({ mode }) => ({
       ...templateCompilerOptions,
     }),
     glsl(),
+    printWebflowScripts(),
   ],
   resolve: {
     alias: {

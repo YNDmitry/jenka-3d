@@ -14,14 +14,22 @@ export function useHeroInteraction(
 ) {
   const currentParallax = { x: 0, y: 0 }
   const targetParallax = { x: 0, y: 0 }
+  let targetElement: HTMLElement | null = null
 
   function onMouseMove(e: MouseEvent) {
-    if (!active.value || reducedMotion.value) {
+    if (!active.value || reducedMotion.value || !targetElement) {
       return
     }
 
-    const x = (e.clientX / window.innerWidth) * 2 - 1
-    const y = -(e.clientY / window.innerHeight) * 2 + 1
+    const rect = targetElement.getBoundingClientRect()
+    
+    // Normalize mouse position relative to the target element
+    // Clamp to -1..1 to prevent extreme movement if mouse is outside (but listener is on element, so usually inside)
+    // Actually, if we listen on window, we can have parallax even outside.
+    // But user asked to relate to the section. Usually implies "Mouse over section".
+    
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
     const factor = CONSTANTS.parallax.factor
 
@@ -42,16 +50,20 @@ export function useHeroInteraction(
   }
 
   onMounted(() => {
-    if (container) {
-      container.addEventListener('mousemove', onMouseMove)
-      container.addEventListener('mouseleave', onMouseLeave)
+    // Priority: .section_main-hero -> container -> window (fallback)
+    const section = document.querySelector('.section_main-hero') as HTMLElement
+    targetElement = section || container || document.body
+
+    if (targetElement) {
+      targetElement.addEventListener('mousemove', onMouseMove)
+      targetElement.addEventListener('mouseleave', onMouseLeave)
     }
   })
 
   onUnmounted(() => {
-    if (container) {
-      container.removeEventListener('mousemove', onMouseMove)
-      container.removeEventListener('mouseleave', onMouseLeave)
+    if (targetElement) {
+      targetElement.removeEventListener('mousemove', onMouseMove)
+      targetElement.removeEventListener('mouseleave', onMouseLeave)
     }
   })
 

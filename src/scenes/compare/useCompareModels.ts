@@ -56,8 +56,10 @@ export function useCompareModels(
   const interactablesB = shallowRef<InteractableItem[]>([])
   const emissiveA = shallowRef<EmissiveEntry[]>([])
   const emissiveB = shallowRef<EmissiveEntry[]>([])
+  const screensA = shallowRef<Material[]>([])
+  const screensB = shallowRef<Material[]>([])
 
-  function analyzeModel(): ModelAnalysis {
+    function analyzeModel(root: Object3D): ModelAnalysis {
     const buttons: Object3D[] = []
     const speakers: Object3D[] = []
     const emissivesMap = new Map<string, EmissiveEntry>()
@@ -129,17 +131,49 @@ export function useCompareModels(
       const sceneA = gltfA.scene as unknown as Object3D
       const sceneB = gltfB.scene as unknown as Object3D
 
-      const polishMaterials = (obj: Object3D) => {
+      const foundScreensA: Material[] = []
+      const foundScreensB: Material[] = []
+
+      const polishMaterials = (obj: Object3D, targetScreens: Material[]) => {
         obj.traverse((child: any) => {
           if (child.isMesh && child.material) {
             const m = child.material
-            if (m.roughness > 0.1 && m.roughness < 0.6) {
-              m.roughness = 0.15
+            const name = m.name.toLowerCase()
+            
+            // 1. Fix Glare on Screens/Glass
+            if (
+              name.includes('glass') ||
+              name.includes('window') ||
+              name.includes('screen') ||
+              name.includes('display')
+            ) {
+               m.envMapIntensity = 0.2
+               m.roughness = 0.2
+               m.needsUpdate = true
+               targetScreens.push(m)
+               return 
             }
-            if (m.metalness < 0.1) {
-              m.metalness = 0.2
-            }
-            m.envMapIntensity = 4.0
+
+            // 2. Preserve Buttons, Lights, and Transparent parts
+            if (
+              name.includes('button') ||
+              name.includes('joystick') ||
+              name.includes('stick') ||
+              name.includes('push') ||
+              m.transparent || 
+              m.opacity < 1.0 || 
+              (m.transmission && m.transmission > 0) || 
+              m.emissiveIntensity > 0.1 ||
+              m.roughness < 0.1 || 
+              m.roughness >= 0.5
+            ) return
+
+            // 3. Make Body look like High Quality Powder Coated Metal
+            m.metalness = 0.8
+            m.roughness = 0.4
+            m.envMapIntensity = 1.5
+            
+            // Deep Black Fix
             if (
               m.color &&
               m.color.r < 0.1 &&
@@ -148,11 +182,16 @@ export function useCompareModels(
             ) {
               m.color.setHex(0x000000)
             }
+            
+            m.needsUpdate = true
           }
         })
       }
-      polishMaterials(sceneA)
-      polishMaterials(sceneB)
+      polishMaterials(sceneA, foundScreensA)
+      polishMaterials(sceneB, foundScreensB)
+
+      screensA.value = foundScreensA
+      screensB.value = foundScreensB
 
       const wrapperA = wrapAndNormalizeModel(sceneA)
       const wrapperB = wrapAndNormalizeModel(sceneB)
@@ -160,8 +199,8 @@ export function useCompareModels(
       wrapperA.updateMatrixWorld(true)
       wrapperB.updateMatrixWorld(true)
 
-      const dataA = analyzeModel()
-      const dataB = analyzeModel()
+      const dataA = analyzeModel(sceneA)
+      const dataB = analyzeModel(sceneB)
 
       // Inject Custom Hotspots
       const addCustomHotspots = (
@@ -239,6 +278,8 @@ export function useCompareModels(
     interactablesB,
     emissiveA,
     emissiveB,
+    screensA,
+    screensB,
     loadModels,
   }
 }

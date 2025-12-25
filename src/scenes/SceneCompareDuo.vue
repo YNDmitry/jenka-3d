@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { TresCanvas } from '@tresjs/core'
-import { NoToneMapping, SRGBColorSpace } from 'three'
+import { LinearSRGBColorSpace, NoToneMapping, SRGBColorSpace } from 'three'
 import RenderDriver from '../three/RenderDriver.vue'
 import SceneCompareDuoContent from './SceneCompareDuoContent.vue'
 import type {
@@ -43,10 +43,10 @@ const transparent = true
     :alpha="transparent"
     :clear-alpha="transparent ? 0 : 1"
     clear-color="#000000"
-    :dpr="[1, 1.25]"
+    :dpr="props.dpr || [1, 2]"
     :antialias="false"
     :tone-mapping="NoToneMapping"
-    :output-color-space="SRGBColorSpace"
+    :output-color-space="LinearSRGBColorSpace"
     :use-legacy-lights="false"
     preset="realistic"
   >

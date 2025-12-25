@@ -42,7 +42,7 @@ export function isCoarsePointer(): boolean {
 }
 
 export function getDeviceClassFromWidth(width: number): DeviceClass {
-  if (width <= 479) { return 'mobile' }
+  if (width <= 767) { return 'mobile' }
   if (width <= 991) { return 'tablet' }
   return 'desktop'
 }
