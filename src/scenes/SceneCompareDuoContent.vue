@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import gsap from 'gsap'
-import { SphereGeometry } from 'three'
+import { MeshBasicMaterial, Mesh, SphereGeometry, DoubleSide } from 'three'
 
 import {
   BloomPmndrs,
@@ -10,7 +10,9 @@ import {
   EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
   ToneMappingPmndrs,
+  VignettePmndrs,
 } from '@tresjs/post-processing'
+import { ToneMappingMode } from 'postprocessing'
 import { Environment, Html } from '@tresjs/cientos'
 
 import type {
@@ -32,7 +34,7 @@ import { useCompareInteraction } from './compare/useCompareInteraction'
 import { useCompareModels } from './compare/useCompareModels'
 import { useInteractiveHotspots } from './compare/useInteractiveHotspots'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
-import { unwrapRenderer } from '../three/utils'
+import { unwrapRenderer, useShadowBaking } from '../three/utils'
 
 const props = defineProps<{
   container?: HTMLElement
@@ -57,7 +59,7 @@ const emit = defineEmits<{
 
 const { emitFromCanvas } = useWebflowIntegration(props.container)
 
-const { renderer, scene } = useTres()
+const { renderer, invalidate } = useTres()
 const { onBeforeRender, start, stop } = useLoop()
 
 // --- 1. Models & State ---
@@ -80,6 +82,9 @@ const {
   emissiveB,
 } = useCompareModels(props.config, props.quality, unwrapRenderer(renderer))
 
+// OPTIMIZATION: Bake shadows once (Professional performance)
+useShadowBaking(renderer, state, invalidate)
+
 // --- 2. Layout ---
 const { layout, applyMode, applyGridLayout } = useCompareLayout(
   modelA,
@@ -98,7 +103,7 @@ const {
   drag,
   resetCamera,
   handlePointerDown,
-  handleModelClick,
+  handleModelClick: _handleModelClick,
 } = useCompareInteraction(
   computed(() => props.active),
   mode,
@@ -110,139 +115,27 @@ const {
   () => emitFromCanvas(),
 )
 
+// Wrapper for click to handle scrolling
+function handleModelClick(e: any, targetMode: CompareMode) {
+  // If we are about to enter a focus mode from grid, apply scroll logic
+  if (internalMode.value === 'grid' && targetMode !== 'grid') {
+    savedScrollY = window.scrollY
+    const section = document.querySelector('.section_arcade-scene')
+    if (section) {
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
+  // If we are clicking (toggling) back to grid
+  else if (internalMode.value === targetMode) {
+    // We are in focus mode and clicked the same model -> go back to grid
+    window.scrollTo({ top: savedScrollY, behavior: 'smooth' })
+  }
+
+  // Delegate to composable
+  _handleModelClick(e, targetMode)
+}
+
 const isDragging = computed(() => drag.isDragging.value)
-
-// Reset interaction if dragging starts
-watch(isDragging, (dragging) => {
-  if (dragging) {
-    onGlowLeave()
-  }
-})
-
-// --- Watch External Trigger ---
-const isInternalUpdate = ref(false)
-
-watch(
-  () => props.trigger,
-  () => {
-    // Guard: If we just updated locally, ignore the echo from Webflow
-    if (isInternalUpdate.value) {
-      isInternalUpdate.value = false
-      return
-    }
-
-    if (internalMode.value === 'grid') {
-      handleModeChange('focus-b', false) // External trigger
-    } else {
-      handleModeChange('grid', false) // External trigger
-    }
-  },
-)
-
-// --- 4. Hotspots ---
-const {
-  activeInteraction,
-  tooltipVisible,
-  glowNudge,
-  onGlowEnter,
-  onGlowLeave,
-  reset: resetHotspots,
-} = useInteractiveHotspots(computed(() => layout.value.camPos))
-
-// --- 5. Webflow Events ---
-onMounted(() => {
-  window.addEventListener('jenka-set-mode', onExternalSetMode)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('jenka-set-mode', onExternalSetMode)
-})
-
-function onExternalSetMode(e: any) {
-  const targetMode = e.detail?.mode
-  if (targetMode && ['grid', 'focus-a', 'focus-b'].includes(targetMode)) {
-    handleModeChange(targetMode as CompareMode, false)
-  }
-}
-
-function handleModeChange(newMode: CompareMode, internal = true) {
-  if (internal) {
-    isInternalUpdate.value = true
-    emitFromCanvas()
-  }
-
-  const prev = internalMode.value
-  internalMode.value = newMode
-  emit('change-mode', newMode)
-
-  // Set attribute manually if internal (since Webflow didn't do it yet)
-  // If external, Webflow likely already set it, but setting it again is harmless
-  if (props.container) {
-    props.container.setAttribute('data-mode', newMode)
-  }
-
-  // Check if we need to reset camera BEFORE resetting hotspots (which clears activeInteraction)
-  if (activeInteraction.value) {
-    resetCamera()
-  }
-
-  resetHotspots()
-  document.body.style.cursor = 'default'
-
-  applyMode(newMode, !props.reducedMotion)
-
-  // Glow buttons logic: only show for the focused model
-  glintsA?.setEnabled?.(newMode === 'focus-a')
-  glintsB?.setEnabled?.(newMode === 'focus-b')
-
-  if (newMode === 'grid') {
-    // Safety: Ensure visibility is restored in case fadeObject logic missed a frame
-    if (modelA.value) modelA.value.visible = true
-    if (modelB.value) modelB.value.visible = true
-  }
-}
-
-// --- 6. Effects ---
-let glintsA: ReturnType<typeof createAttachedGlints> | null = null
-let glintsB: ReturnType<typeof createAttachedGlints> | null = null
-
-const postfx = computed(() =>
-  getPostFXSettings({
-    quality: props.quality,
-    bloomMultiplier: props.bloom,
-    reducedMotion: props.reducedMotion,
-    focusBoost: isFocus.value ? 1.15 : 1,
-  }),
-)
-const useComposer = computed(
-  () => postfx.value.bloom.enabled || postfx.value.smaa,
-)
-const multisampling = computed(() => {
-  if (useComposer.value && props.quality === 'high') return 2
-  return 0
-})
-
-const lightConfig = computed(() => {
-  const isMobile = props.device === 'mobile'
-  const intensityMod = isMobile ? 0.8 : 1.0
-
-  // Focus A: Key from Left, Fill from Right
-  if (mode.value === 'focus-a') {
-    return {
-      key: { pos: [-3.5, 5.0, 7.0] as [number, number, number], intensity: 2.5 * intensityMod },
-      fill: { pos: [5.0, 2.5, 4.0] as [number, number, number], intensity: 0.7 * intensityMod },
-      rim: { pos: [0.0, 4.0, -6.0] as [number, number, number], intensity: 2.0 * intensityMod },
-    }
-  }
-  // Focus B or Grid: Key from Right, Fill from Left (Standard)
-  return {
-    key: { pos: [3.5, 5.5, 6.5] as [number, number, number], intensity: 2.5 * intensityMod },
-    fill: { pos: [-6.5, 2.5, 4.0] as [number, number, number], intensity: 0.6 * intensityMod },
-    rim: { pos: [0.0, 4.0, -6.0] as [number, number, number], intensity: 2.0 * intensityMod },
-  }
-})
-
-const glowGeom = new SphereGeometry(0.1, 16, 16)
 
 // Hover Effect
 function handleHover(target: 'a' | 'b' | null) {
@@ -302,18 +195,181 @@ watch(isDragging, (dragging) => {
   }
 })
 
-// --- Lifecycle ---
+// --- Watch External Trigger ---
+const isInternalUpdate = ref(false)
+
+watch(
+  () => props.trigger,
+  () => {
+    // Guard: If we just updated locally, ignore the echo from Webflow
+    if (isInternalUpdate.value) {
+      isInternalUpdate.value = false
+      return
+    }
+
+    if (internalMode.value === 'grid') {
+      handleModeChange('focus-b', false) // External trigger
+    } else {
+      handleModeChange('grid', false) // External trigger
+    }
+  },
+)
+
+// --- 4. Hotspots ---
+const {
+  activeInteraction,
+  tooltipVisible,
+  glowNudge,
+  onGlowEnter,
+  onGlowLeave,
+  reset: resetHotspots,
+} = useInteractiveHotspots(computed(() => layout.value.camPos))
+
+// --- 5. Webflow Events ---
 onMounted(() => {
+  window.addEventListener('jenka-set-mode', onExternalSetMode)
   ctx = gsap.context(() => {})
 })
 
 onUnmounted(() => {
+  window.removeEventListener('jenka-set-mode', onExternalSetMode)
   ctx?.revert()
   glintsA?.dispose()
   glintsB?.dispose()
   if (modelA.value) disposeObject3D(modelA.value)
   if (modelB.value) disposeObject3D(modelB.value)
+  invisibleMaterial.dispose()
 })
+
+let savedScrollY = 0
+
+function onExternalSetMode(e: any) {
+  const targetMode = e.detail?.mode
+  if (targetMode && ['grid', 'focus-a', 'focus-b'].includes(targetMode)) {
+    // Scroll Logic:
+    // If entering focus mode (from grid), save scroll and go to top of section
+    if (targetMode !== 'grid' && internalMode.value === 'grid') {
+      savedScrollY = window.scrollY
+      const section = document.querySelector('.section_arcade-scene')
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+    // If going back to grid, restore scroll
+    else if (targetMode === 'grid' && internalMode.value !== 'grid') {
+      // Use timeout to allow transition to start/finish if needed,
+      // but immediate feels snappier. Smooth scroll back.
+      window.scrollTo({ top: savedScrollY, behavior: 'smooth' })
+    }
+
+    handleModeChange(targetMode as CompareMode, false)
+  }
+}
+
+function handleModeChange(newMode: CompareMode, internal = true) {
+  if (internal) {
+    isInternalUpdate.value = true
+    emitFromCanvas()
+  }
+
+  internalMode.value = newMode
+  emit('change-mode', newMode)
+
+  // Set attribute manually if internal (since Webflow didn't do it yet)
+  // If external, Webflow likely already set it, but setting it again is harmless
+  if (props.container) {
+    props.container.setAttribute('data-mode', newMode)
+  }
+
+  // Check if we need to reset camera BEFORE resetting hotspots (which clears activeInteraction)
+  if (activeInteraction.value) {
+    resetCamera()
+  }
+
+  resetHotspots()
+  document.body.style.cursor = 'default'
+
+  applyMode(newMode, !props.reducedMotion)
+
+  if (newMode === 'grid') {
+    // Safety: Ensure visibility is restored in case fadeObject logic missed a frame
+    if (modelA.value) modelA.value.visible = true
+    if (modelB.value) modelB.value.visible = true
+  }
+}
+
+// --- 6. Effects ---
+let glintsA: ReturnType<typeof createAttachedGlints> | null = null
+let glintsB: ReturnType<typeof createAttachedGlints> | null = null
+
+const postfx = computed(() =>
+  getPostFXSettings({
+    quality: props.quality,
+    bloomMultiplier: props.bloom,
+    reducedMotion: props.reducedMotion,
+    focusBoost: isFocus.value ? 1.15 : 1,
+  }),
+)
+
+const lightConfig = computed(() => {
+  const isMobile = props.device === 'mobile'
+  const intensityMod = isMobile ? 0.8 : 1.0
+
+  // Focus A: Key from Left, Fill from Right (Mirrored Arcade values)
+  if (mode.value === 'focus-a') {
+    return {
+      key: {
+        pos: [-3.5, 5.5, 6.5] as [number, number, number],
+        intensity: 2.0 * intensityMod,
+      },
+      fill: {
+        pos: [6.5, 2.5, 4.0] as [number, number, number],
+        intensity: 0.5 * intensityMod,
+      },
+      rim: {
+        pos: [0.0, 4.0, -6.0] as [number, number, number],
+        intensity: 1.5 * intensityMod,
+      },
+    }
+  }
+  // Focus B or Grid: Key from Right, Fill from Left (Standard Arcade values)
+  return {
+    key: {
+      pos: [3.5, 5.5, 6.5] as [number, number, number],
+      intensity: 2.0 * intensityMod,
+    },
+    fill: {
+      pos: [-6.5, 2.5, 4.0] as [number, number, number],
+      intensity: 0.5 * intensityMod,
+    },
+    rim: {
+      pos: [0.0, 4.0, -6.0] as [number, number, number],
+      intensity: 1.5 * intensityMod,
+    },
+  }
+})
+
+const glowGeom = new SphereGeometry(0.1, 16, 16)
+const invisibleMaterial = new MeshBasicMaterial({
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+  colorWrite: false,
+  side: DoubleSide,
+  color: 0xffffff,
+})
+
+const createHotspotMeshes = (items: any[]) =>
+  items.map((item) => {
+    const m = new Mesh(glowGeom, invisibleMaterial)
+    m.position.set(item.position[0], item.position[1], item.position[2])
+    m.scale.set(1.2, 1.2, 1.2)
+    m.userData = { id: item.id, label: item.label, isHotspot: true, item }
+    return m
+  })
+
+const hotspotMeshesA = computed(() => createHotspotMeshes(interactablesA.value))
+const hotspotMeshesB = computed(() => createHotspotMeshes(interactablesB.value))
 
 watch(
   () => props.active,
@@ -352,7 +408,7 @@ watch(
             })
           : null
 
-      // Glints are disabled in Grid mode by default
+      // Set initial state based on mode
       glintsA?.setEnabled?.(mode.value === 'focus-a')
       glintsB?.setEnabled?.(mode.value === 'focus-b')
 
@@ -362,6 +418,11 @@ watch(
   { immediate: true, deep: true },
 )
 
+watch(mode, (newMode) => {
+  glintsA?.setEnabled?.(newMode === 'focus-a')
+  glintsB?.setEnabled?.(newMode === 'focus-b')
+})
+
 watch(
   () => props.emissive,
   (newVal, oldVal) => {
@@ -369,7 +430,7 @@ watch(
       list.forEach((entry) => {
         if (entry.material) {
           // Обновляем базу (на случай пропорций)
-          // Но главное - обновляем сам материал:
+          // Но главное - обновляем сам material:
           entry.material.emissiveIntensity = newVal
         }
       })
@@ -439,34 +500,30 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   />
 
   <Suspense>
-    <Environment
-      preset="studio"
-      :blur="0.5"
-      :background="false"
-    />
+    <Environment preset="city" :blur="1.0" :background="false" />
   </Suspense>
 
   <!-- Professional Studio Lighting -->
   <TresAmbientLight :intensity="0.05" />
-  
+
   <!-- Key Light: Main source -->
-  <TresDirectionalLight 
-    :position="lightConfig.key.pos" 
-    :intensity="lightConfig.key.intensity" 
-    cast-shadow 
+  <TresDirectionalLight
+    :position="lightConfig.key.pos"
+    :intensity="lightConfig.key.intensity"
+    cast-shadow
   />
-  
+
   <!-- Fill Light: Softens shadows -->
-  <TresDirectionalLight 
-    :position="lightConfig.fill.pos" 
-    :intensity="lightConfig.fill.intensity" 
-    color="#bcd7ff" 
+  <TresDirectionalLight
+    :position="lightConfig.fill.pos"
+    :intensity="lightConfig.fill.intensity"
+    color="#bcd7ff"
   />
-  
+
   <!-- Rim Light: Backlight for separation -->
-  <TresDirectionalLight 
-    :position="lightConfig.rim.pos" 
-    :intensity="lightConfig.rim.intensity" 
+  <TresDirectionalLight
+    :position="lightConfig.rim.pos"
+    :intensity="lightConfig.rim.intensity"
   />
 
   <TresGroup ref="stageRef" :position="layout.stagePos">
@@ -484,36 +541,33 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         @pointerleave="() => handleHover(null)"
       >
         <template v-if="mode === 'focus-a'">
-          <TresMesh
-            v-for="item in interactablesA"
-            :key="item.id"
-            :geometry="glowGeom"
-            :position="item.position"
-            :scale="1.2"
+          <primitive
+            v-for="(mesh, i) in hotspotMeshesA"
+            :key="mesh.userData.id"
+            :object="mesh"
             @pointerenter="
               device === 'desktop' &&
               mode === 'focus-a' &&
               !isDragging &&
-              onGlowEnter(item)
+              onGlowEnter(mesh.userData.item)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-a')"
             @pointer-down="handlePointerDown"
             @pointerdown="handlePointerDown"
           >
-            <TresMeshBasicMaterial :visible="false" />
             <Html
-              v-if="activeInteraction === item.id && tooltipVisible"
+              v-if="activeInteraction === mesh.userData.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
               :style="{ pointerEvents: 'none' }"
             >
               <div
                 class="jenka-tech-hud"
-                :class="{ 'is-mirrored': item.position[0] < 0 }"
+                :class="{ 'is-mirrored': mesh.position.x < 0 }"
               >
                 <div class="hud-box">
-                  {{ item.label }}
+                  {{ mesh.userData.label }}
                 </div>
                 <svg
                   class="hud-leader"
@@ -539,7 +593,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
                 </svg>
               </div>
             </Html>
-          </TresMesh>
+          </primitive>
         </template>
       </primitive>
     </TresGroup>
@@ -558,36 +612,33 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         @pointerleave="() => handleHover(null)"
       >
         <template v-if="mode === 'focus-b'">
-          <TresMesh
-            v-for="item in interactablesB"
-            :key="item.id"
-            :geometry="glowGeom"
-            :position="item.position"
-            :scale="1.2"
+          <primitive
+            v-for="(mesh, i) in hotspotMeshesB"
+            :key="mesh.userData.id"
+            :object="mesh"
             @pointerenter="
               device === 'desktop' &&
               mode === 'focus-b' &&
               !isDragging &&
-              onGlowEnter(item)
+              onGlowEnter(mesh.userData.item)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-b')"
             @pointer-down="handlePointerDown"
             @pointerdown="handlePointerDown"
           >
-            <TresMeshBasicMaterial :visible="false" />
             <Html
-              v-if="activeInteraction === item.id && tooltipVisible"
+              v-if="activeInteraction === mesh.userData.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
               :style="{ pointerEvents: 'none' }"
             >
               <div
                 class="jenka-tech-hud"
-                :class="{ 'is-mirrored': item.position[0] < 0 }"
+                :class="{ 'is-mirrored': mesh.position.x < 0 }"
               >
                 <div class="hud-box">
-                  {{ item.label }}
+                  {{ mesh.userData.label }}
                 </div>
                 <svg
                   class="hud-leader"
@@ -613,55 +664,24 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
                 </svg>
               </div>
             </Html>
-          </TresMesh>
+          </primitive>
         </template>
       </primitive>
     </TresGroup>
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs v-if="useComposer" :multisampling="multisampling">
+    <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        v-if="postfx.bloom.enabled"
-        :intensity="postfx.bloom.strength"
-        :luminance-threshold="postfx.bloom.threshold"
-        :luminance-smoothing="postfx.bloom.radius"
+        :intensity="props.bloom * 0.5"
+        :luminance-threshold="1.8"
+        :luminance-smoothing="0.2"
         mipmap-blur
       />
       <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
-      <ToneMappingPmndrs :exposure="1.0" />
-      <SMAA v-if="postfx.smaa" />
+      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
+      <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
+      <SMAA />
     </EffectComposerPmndrs>
   </Suspense>
 </template>
-
-<style>
-.jenka-annotation {
-  font-family: sans-serif;
-  pointer-events: none;
-  user-select: none;
-  opacity: 0;
-  animation: fadeIn 0.3s forwards;
-}
-.jenka-annotation h3 {
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.jenka-annotation p {
-  margin: 0;
-  font-size: 12px;
-  opacity: 0.7;
-}
-@keyframes fadeIn {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-}
-</style>
