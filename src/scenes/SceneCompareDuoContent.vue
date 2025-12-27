@@ -388,40 +388,50 @@ watch(state, (s) => emit('state', s))
 
 watch(
   () => [props.config.modelA, props.config.modelB, props.quality, props.device],
-  () => {
-    loadModels({
+  async () => {
+    // Clean up previous glints (including their textures) to prevent memory leaks
+    if (glintsA) {
+      glintsA.dispose()
+      glintsA = null
+    }
+    if (glintsB) {
+      glintsB.dispose()
+      glintsB = null
+    }
+
+    await loadModels({
       emissive: props.emissive,
       envIntensity: props.envIntensity,
-    }).then(() => {
-      const isDesktop = props.device === 'desktop'
-
-      const targetsA = [...buttonsA.value]
-      // Glints enabled
-      glintsA =
-        isDesktop && targetsA.length > 0
-          ? createAttachedGlints({
-              targets: targetsA,
-              opacity: CONSTANTS.glints.opacity,
-              size: CONSTANTS.glints.size,
-            })
-          : null
-
-      const targetsB = [...buttonsB.value]
-      glintsB =
-        isDesktop && targetsB.length > 0
-          ? createAttachedGlints({
-              targets: targetsB,
-              opacity: CONSTANTS.glints.opacity,
-              size: CONSTANTS.glints.size,
-            })
-          : null
-
-      // Set initial state based on mode
-      glintsA?.setEnabled?.(mode.value === 'focus-a')
-      glintsB?.setEnabled?.(mode.value === 'focus-b')
-
-      applyGridLayout()
     })
+
+    const isDesktop = props.device === 'desktop'
+
+    const targetsA = [...buttonsA.value]
+    // Glints enabled
+    glintsA =
+      isDesktop && targetsA.length > 0
+        ? createAttachedGlints({
+            targets: targetsA,
+            opacity: CONSTANTS.glints.opacity,
+            size: CONSTANTS.glints.size,
+          })
+        : null
+
+    const targetsB = [...buttonsB.value]
+    glintsB =
+      isDesktop && targetsB.length > 0
+        ? createAttachedGlints({
+            targets: targetsB,
+            opacity: CONSTANTS.glints.opacity,
+            size: CONSTANTS.glints.size,
+          })
+        : null
+
+    // Set initial state based on mode
+    glintsA?.setEnabled?.(mode.value === 'focus-a')
+    glintsB?.setEnabled?.(mode.value === 'focus-b')
+
+    applyGridLayout()
   },
   { immediate: true, deep: true },
 )
