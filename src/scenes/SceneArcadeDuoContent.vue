@@ -234,7 +234,9 @@ const stagePos = computed(() => {
   <TresDirectionalLight
     :position="lightConfig.key.pos"
     :intensity="lightConfig.key.intensity"
-    cast-shadow
+    :cast-shadow="quality === 'high'"
+    :shadow-map-size="[2048, 2048]"
+    :shadow-bias="-0.0001"
   />
 
   <!-- Fill Light: Softens shadows -->

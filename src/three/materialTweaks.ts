@@ -7,6 +7,7 @@ import {
   MeshStandardMaterial,
   NoColorSpace,
   SRGBColorSpace,
+  CanvasTexture,
 } from 'three'
 import type { Material, Mesh, Object3D, Texture, WebGLRenderer } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
@@ -106,6 +107,62 @@ function clampMaterialScalars(material: any): void {
 }
 
 /**
+ * Resizes a texture to a maximum dimension to save memory on mobile.
+ */
+function resizeTexture(tex: Texture, maxDim: number): Texture {
+  const image = tex.image as HTMLImageElement | HTMLCanvasElement | undefined
+  if (!image || !image.width || !image.height) { return tex }
+
+  const width = image.width
+  const height = image.height
+
+  if (width <= maxDim && height <= maxDim) { return tex }
+
+  let newWidth = width
+  let newHeight = height
+
+  if (width > height) {
+    if (width > maxDim) {
+      newWidth = maxDim
+      newHeight = Math.round(height * (maxDim / width))
+    }
+  }
+  else {
+    if (height > maxDim) {
+      newHeight = maxDim
+      newWidth = Math.round(width * (maxDim / height))
+    }
+  }
+
+  const canvas = document.createElement('canvas')
+  canvas.width = newWidth
+  canvas.height = newHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) { return tex }
+
+  ctx.drawImage(image, 0, 0, newWidth, newHeight)
+
+  const newTex = new CanvasTexture(canvas)
+
+  // Copy properties
+  newTex.colorSpace = tex.colorSpace
+  newTex.wrapS = tex.wrapS
+  newTex.wrapT = tex.wrapT
+  newTex.magFilter = tex.magFilter
+  newTex.minFilter = tex.minFilter
+  newTex.anisotropy = tex.anisotropy
+  newTex.repeat.copy(tex.repeat)
+  newTex.offset.copy(tex.offset)
+  newTex.center.copy(tex.center)
+  newTex.rotation = tex.rotation
+  newTex.name = tex.name
+  newTex.userData = tex.userData
+
+  newTex.needsUpdate = true
+  return newTex
+}
+
+/**
  * Applies material tweaks AND uploads textures to GPU immediately.
  */
 export function optimizeModel(
@@ -121,6 +178,15 @@ export function optimizeModel(
   } = options
 
   const r = unwrapRenderer(renderer)
+  const resizedTextures = new Map<Texture, Texture>()
+
+  const getResized = (tex: Texture | null): Texture | null => {
+    if (!tex) { return null }
+    if (resizedTextures.has(tex)) { return resizedTextures.get(tex)! }
+    const newTex = resizeTexture(tex, 1024)
+    resizedTextures.set(tex, newTex)
+    return newTex
+  }
 
   root.traverse((obj) => {
     const anyObj = obj as any
@@ -173,6 +239,16 @@ export function optimizeModel(
       }
 
       const material: any = mat
+
+      // 0. Texture Downscaling (Mobile Memory Opt)
+      if (quality === 'med' || quality === 'low') {
+        if (material.map) { material.map = getResized(material.map) }
+        if (material.emissiveMap) { material.emissiveMap = getResized(material.emissiveMap) }
+        if (material.normalMap) { material.normalMap = getResized(material.normalMap) }
+        if (material.roughnessMap) { material.roughnessMap = getResized(material.roughnessMap) }
+        if (material.metalnessMap) { material.metalnessMap = getResized(material.metalnessMap) }
+        if (material.aoMap) { material.aoMap = getResized(material.aoMap) }
+      }
 
       // 1. Color Space
       setTextureColorSpace(material.map, SRGBColorSpace)

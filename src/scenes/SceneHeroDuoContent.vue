@@ -236,7 +236,8 @@ const modelConfigB = computed(
   <TresDirectionalLight
     :position="[3.5, 5.5, 6.5]"
     :intensity="1.0"
-    cast-shadow
+    :cast-shadow="shadowConfig.cast"
+    :shadow-map-size="[shadowConfig.size, shadowConfig.size]"
   />
 
   <!-- Fill Light: Softens shadows -->

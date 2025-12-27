@@ -118,6 +118,11 @@ const {
 
 // Wrapper for click to handle scrolling
 function handleModelClick(e: any, targetMode: CompareMode) {
+  // Disable click on mobile/tablet in grid mode to prevent accidental triggers while scrolling
+  if (props.device !== 'desktop' && internalMode.value === 'grid') {
+    return
+  }
+
   // If we are about to enter a focus mode from grid, apply scroll logic
   if (internalMode.value === 'grid' && targetMode !== 'grid') {
     savedScrollY = window.scrollY
@@ -528,7 +533,9 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   <TresDirectionalLight
     :position="lightConfig.key.pos"
     :intensity="lightConfig.key.intensity"
-    cast-shadow
+    :cast-shadow="quality === 'high'"
+    :shadow-map-size="[2048, 2048]"
+    :shadow-bias="-0.0001"
   />
 
   <!-- Fill Light: Softens shadows -->
