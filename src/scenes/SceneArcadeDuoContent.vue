@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 
 import {
   BloomPmndrs,
   BrightnessContrastPmndrs,
   EffectComposerPmndrs,
-  HueSaturationPmndrs,
   SMAA,
   ToneMappingPmndrs,
+  VignettePmndrs,
 } from '@tresjs/post-processing'
 import { ToneMappingMode } from 'postprocessing'
 import { Environment } from '@tresjs/cientos'
@@ -21,7 +21,8 @@ import type {
   WebflowSceneConfig,
 } from '../shared/types'
 import { getPostFXSettings } from '../three/postfx'
-import { disposeObject3D } from '../three/dispose'
+import { unwrapRenderer, useShadowBaking } from '../three/utils'
+import { createAttachedGlints } from '../three/glow'
 
 import { CONSTANTS } from './arcade/config'
 import { useArcadeModels } from './arcade/useArcadeModels'
@@ -54,7 +55,7 @@ const cameraRef = shallowRef<PerspectiveCamera | null>(null)
 const stageRef = shallowRef<any>(null)
 
 const { renderer, invalidate } = useTres()
-const { start, stop } = useLoop()
+const { start, stop, onBeforeRender } = useLoop()
 
 watch(
   () => props.active,
@@ -63,10 +64,26 @@ watch(
 )
 
 // --- Models ---
-const { state, modelA, modelB, loadModels, LAYER_A, LAYER_B } =
-  useArcadeModels(renderer, computed(() => props.device))
+const {
+  state,
+  modelA,
+  modelB,
+  buttonsA,
+  buttonsB,
+  loadModels,
+  LAYER_A,
+  LAYER_B,
+} = useArcadeModels(
+  props.config,
+  props.quality,
+  unwrapRenderer(renderer),
+  computed(() => props.device),
+)
 
 watch(state, (s) => emit('state', s))
+
+// OPTIMIZATION: Bake shadows once (Professional performance)
+useShadowBaking(renderer, state, invalidate)
 
 watch(cameraRef, (cam) => {
   if (cam) {
@@ -76,18 +93,57 @@ watch(cameraRef, (cam) => {
 })
 
 watch(
-  () => [props.config.modelA, props.config.modelB, props.quality],
+  () => [props.config.modelA, props.config.modelB, props.quality, props.device],
   () => {
-    loadModels(
-      props.config.modelA,
-      props.config.modelB,
-      props.quality,
-      props.emissive,
-      props.envIntensity,
-    )
+    loadModels({
+      emissive: props.emissive,
+      envIntensity: props.envIntensity,
+    })
   },
   { immediate: true },
 )
+
+// --- Glints ---
+let glintsA: ReturnType<typeof createAttachedGlints> | null = null
+let glintsB: ReturnType<typeof createAttachedGlints> | null = null
+
+watch(
+  [buttonsA, buttonsB, () => props.quality],
+  () => {
+    if (glintsA) glintsA.dispose()
+    if (glintsB) glintsB.dispose()
+
+    if (props.quality === 'low') return
+
+    if (buttonsA.value.length) {
+      glintsA = createAttachedGlints({
+        targets: buttonsA.value,
+        opacity: 0.9,
+        size: 0.15,
+      })
+    }
+    if (buttonsB.value.length) {
+      glintsB = createAttachedGlints({
+        targets: buttonsB.value,
+        opacity: 0.9,
+        size: 0.15,
+      })
+    }
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => {
+  glintsA?.dispose()
+  glintsB?.dispose()
+})
+
+onBeforeRender(({ elapsed }) => {
+  if (!props.active) return
+
+  glintsA?.update(elapsed)
+  glintsB?.update(elapsed + 0.5) // Offset phase
+})
 
 // Semaphore
 const isInternalUpdate = ref(false)
@@ -99,18 +155,17 @@ const onInternalSwap = () => {
 }
 
 // --- Interaction (Swap & Parallax) ---
-const { cameraPosition, lightIntensity, handleClick, handleHover, swap } =
-  useArcadeInteraction(
-    computed(() => props.active),
-    computed(() => props.device),
-    computed(() => props.reducedMotion),
-    props.container,
-    cameraRef,
-    modelA,
-    modelB,
-    invalidate,
-    onInternalSwap,
-  )
+const { cameraPosition, handleClick, handleHover, swap } = useArcadeInteraction(
+  computed(() => props.active),
+  computed(() => props.device),
+  computed(() => props.reducedMotion),
+  props.container,
+  cameraRef,
+  modelA,
+  modelB,
+  invalidate,
+  onInternalSwap,
+)
 
 // Watch external trigger (HTML click -> data-toggle -> prop -> swap)
 watch(
@@ -125,6 +180,26 @@ watch(
 )
 
 // --- Optimizations ---
+const lightConfig = computed(() => {
+  const isMobile = props.device === 'mobile'
+  const intensityMod = isMobile ? 0.8 : 1.0
+
+  return {
+    key: {
+      pos: [3.5, 5.5, 6.5] as [number, number, number],
+      intensity: 2.0 * intensityMod,
+    },
+    fill: {
+      pos: [-6.5, 2.5, 4.0] as [number, number, number],
+      intensity: 0.5 * intensityMod,
+    },
+    rim: {
+      pos: [0.0, 4.0, -6.0] as [number, number, number],
+      intensity: 1.5 * intensityMod,
+    },
+  }
+})
+
 const postfx = computed(() =>
   getPostFXSettings({
     quality: props.quality,
@@ -132,26 +207,6 @@ const postfx = computed(() =>
     reducedMotion: props.reducedMotion,
   }),
 )
-
-const useComposer = computed(
-  () => postfx.value.bloom.enabled || postfx.value.smaa,
-)
-
-const multisampling = computed(() => {
-  // Balanced: 2x is sufficient to hide aliasing on most screens
-  if (useComposer.value && props.quality === 'high') return 2
-  return 0
-})
-
-const shadowConfig = computed(() => {
-  if (props.quality === 'low') {
-    return { cast: false, size: 512 }
-  }
-  if (props.quality === 'med') {
-    return { cast: true, size: 1024 }
-  }
-  return { cast: true, size: 2048 }
-})
 
 const stagePos = computed(() => {
   return (
@@ -169,38 +224,30 @@ const stagePos = computed(() => {
   />
 
   <Suspense>
-    <Environment
-      preset="studio"
-      :blur="0.5"
-      :background="false"
-    />
+    <Environment preset="city" :blur="1.0" :background="false" />
   </Suspense>
 
-  <!-- Professional Studio Lighting -->
-  <TresAmbientLight :intensity="0.01" />
-  
-  <!-- Key Light: Main source -->
-  <TresDirectionalLight 
-    :position="[3.5, 5.5, 6.5]" 
-    :intensity="1.0" 
-    cast-shadow 
-  />
-  
-  <!-- Fill Light: Softens shadows -->
-  <TresDirectionalLight :position="[-6.5, 2.5, 4.0]" :intensity="0.1" color="#bcd7ff" />
-  
-  <!-- Rim Light: Backlight for separation -->
-  <TresDirectionalLight :position="[0.0, 4.0, -6.0]" :intensity="0.5" />
+  <!-- Professional Studio Lighting (Matched to Compare Scene) -->
+  <TresAmbientLight :intensity="0.05" />
 
-  <!-- Accent Light: Premium Violet Underglow -->
-  <TresSpotLight
-    :position="[0.0, -3.0, 3.0]"
-    :intensity="15.0"
-    color="#FF4AFF"
-    :angle="1.0"
-    :penumbra="1.0"
-    :look-at="[0.0, -1.0, 0]"
+  <!-- Key Light: Main source -->
+  <TresDirectionalLight
+    :position="lightConfig.key.pos"
+    :intensity="lightConfig.key.intensity"
     cast-shadow
+  />
+
+  <!-- Fill Light: Softens shadows -->
+  <TresDirectionalLight
+    :position="lightConfig.fill.pos"
+    :intensity="lightConfig.fill.intensity"
+    color="#bcd7ff"
+  />
+
+  <!-- Rim Light: Backlight for separation -->
+  <TresDirectionalLight
+    :position="lightConfig.rim.pos"
+    :intensity="lightConfig.rim.intensity"
   />
 
   <TresGroup ref="stageRef" :position="stagePos">
@@ -227,14 +274,15 @@ const stagePos = computed(() => {
   <Suspense>
     <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        :intensity="props.bloom"
-        :luminance-threshold="1.1"
-        :luminance-smoothing="0.3"
+        :intensity="props.bloom * 0.5"
+        :luminance-threshold="1.8"
+        :luminance-smoothing="0.2"
         mipmap-blur
       />
       <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
-      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="props.exposure" />
-      <SMAA v-if="quality === 'high'" />
+      <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
+      <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
+      <SMAA />
     </EffectComposerPmndrs>
   </Suspense>
 </template>

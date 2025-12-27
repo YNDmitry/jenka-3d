@@ -53,12 +53,22 @@ export function resolveQualityTier(preference: QualityPreference, fallback: Qual
 }
 
 export function guessQualityTier(): QualityTier {
-  const isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+  const ua = navigator.userAgent
+  const isIOS = /iPhone|iPad|iPod/i.test(ua)
+  const isMobileUA = /Android|iPhone|iPad|iPod/i.test(ua)
   const memory = (navigator as any).deviceMemory as number | undefined
   const cores = navigator.hardwareConcurrency ?? 4
 
-  // Modern phones are powerful. Default to 'med' instead of 'low'.
-  if (isMobileUA) { return 'med' }
+  // iOS devices generally have excellent GPUs (Metal/Apple Silicon).
+  // Default to 'high' to ensure premium materials (Clearcoat) and textures.
+  if (isIOS) { return 'high' }
+
+  // Upgrade Android to 'high' as well, relying on memory check to downgrade weak ones.
+  if (isMobileUA) {
+    if (typeof memory === 'number' && memory <= 4) { return 'low' }
+    return 'high'
+  }
+  
   if (typeof memory === 'number' && memory <= 4) { return 'low' }
   if (cores <= 4) { return 'med' }
   return 'high'

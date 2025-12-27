@@ -1,11 +1,12 @@
 import { markRaw, ref, shallowRef } from 'vue'
 import {
-  Box3,
+  CanvasTexture,
+  SRGBColorSpace,
+  DoubleSide,
   Group,
   type Material,
+  MeshStandardMaterial,
   type Object3D,
-  type Texture,
-  Vector3,
 } from 'three'
 import type {
   LoaderState,
@@ -29,14 +30,6 @@ interface InteractableItem {
   type: 'button' | 'speaker'
 }
 
-interface ModelAnalysis {
-  buttons: Object3D[]
-  speakers: Object3D[]
-  emissives: EmissiveEntry[]
-  textures: Texture[]
-  interactables: InteractableItem[]
-}
-
 export function useCompareModels(
   config: WebflowSceneConfig,
   quality: QualityTier,
@@ -58,36 +51,6 @@ export function useCompareModels(
   const emissiveB = shallowRef<EmissiveEntry[]>([])
   const screensA = shallowRef<Material[]>([])
   const screensB = shallowRef<Material[]>([])
-
-    function analyzeModel(root: Object3D): ModelAnalysis {
-    const buttons: Object3D[] = []
-    const speakers: Object3D[] = []
-    const emissivesMap = new Map<string, EmissiveEntry>()
-    const textures = new Set<Texture>()
-    const interactablesList: InteractableItem[] = []
-
-    // Automatic traversal removed as requested.
-    // We only use custom hotspots defined in config.
-
-    return {
-      buttons,
-      speakers,
-      emissives: Array.from(emissivesMap.values()),
-      textures: Array.from(textures),
-      interactables: interactablesList,
-    }
-  }
-
-  function wrapAndNormalizeModel(gltfScene: Object3D): Object3D {
-    const wrapper = new Group()
-    wrapper.add(gltfScene)
-    const box = new Box3().setFromObject(gltfScene)
-    const center = box.getCenter(new Vector3())
-    gltfScene.position.x -= center.x
-    gltfScene.position.z -= center.z
-    gltfScene.position.y -= box.min.y
-    return wrapper as unknown as Object3D
-  }
 
   async function loadModels(props: { emissive: number; envIntensity: number }) {
     if (!config.modelA || !config.modelB) {
@@ -134,45 +97,58 @@ export function useCompareModels(
       const foundScreensA: Material[] = []
       const foundScreensB: Material[] = []
 
-      const polishMaterials = (obj: Object3D, targetScreens: Material[]) => {
+      // Exact match of Arcade's polish logic
+      const polishMaterials = (
+        obj: Object3D,
+        targetScreens: Material[],
+        isDarkUnit: boolean = false,
+      ) => {
         obj.traverse((child: any) => {
           if (child.isMesh && child.material) {
             const m = child.material
-            const name = m.name.toLowerCase()
-            
-            // 1. Fix Glare on Screens/Glass
-            if (
-              name.includes('glass') ||
-              name.includes('window') ||
-              name.includes('screen') ||
-              name.includes('display')
-            ) {
-               m.envMapIntensity = 0.2
-               m.roughness = 0.2
-               m.needsUpdate = true
-               targetScreens.push(m)
-               return 
+            const name = (m.name || '').toLowerCase()
+
+            // Protect Glass, Screens, and Lights by Name and Property
+            if (m.emissiveMap) {
+              m.envMapIntensity = 0 // No environmental reflections on screens
+              m.roughness = 0.2 // Glossy for premium glass look
+              m.metalness = 0.0
+              // High static emission for "On" state
+              m.emissiveIntensity = 1.2
+              m.needsUpdate = true
+              targetScreens.push(m)
+              return
             }
 
-            // 2. Preserve Buttons, Lights, and Transparent parts
+            m.envMapIntensity = props.envIntensity * 0.5
+            const isScreenFrame = child.name.includes('Cylinder014')
+
+            if (isScreenFrame) {
+              m.color.multiplyScalar(0.4) // Darken existing color
+            }
+
+            // FILTER: Skip buttons, joysticks, glass, etc.
             if (
               name.includes('button') ||
               name.includes('joystick') ||
               name.includes('stick') ||
               name.includes('push') ||
-              m.transparent || 
-              m.opacity < 1.0 || 
-              (m.transmission && m.transmission > 0) || 
+              m.transparent ||
+              m.opacity < 1.0 ||
+              (m.transmission && m.transmission > 0) ||
               m.emissiveIntensity > 0.1 ||
-              m.roughness < 0.1 || 
+              m.roughness < 0.1 ||
               m.roughness >= 0.5
-            ) return
+            ) {
+              m.needsUpdate = true
+              return
+            }
 
-            // 3. Make Body look like High Quality Powder Coated Metal
+            // Make it look like High Quality Powder Coated Metal
             m.metalness = 0.8
-            m.roughness = 0.4
-            m.envMapIntensity = 1.5
-            
+            m.roughness = 0.35
+            m.envMapIntensity = props.envIntensity * 0.8
+
             // Deep Black Fix
             if (
               m.color &&
@@ -182,80 +158,87 @@ export function useCompareModels(
             ) {
               m.color.setHex(0x000000)
             }
-            
+
             m.needsUpdate = true
           }
         })
       }
-      polishMaterials(sceneA, foundScreensA)
-      polishMaterials(sceneB, foundScreensB)
+      polishMaterials(sceneA, foundScreensA, false)
+      polishMaterials(sceneB, foundScreensB, true)
+
+      // Fix for Plane001 in Model B: Inherit material from Cube_01005
+      let sourceMat: any = null
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name === 'Cube_01005') {
+          sourceMat = child.material
+        }
+      })
+      if (sourceMat) {
+        sceneB.traverse((child: any) => {
+          if (child.isMesh && child.name === 'Plane001') {
+            child.material = sourceMat.clone()
+            child.material.color.multiplyScalar(0.5)
+          }
+        })
+      }
+
+      // Fix for Sphere in Model B: Replace with fresh transparent material
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name.toLowerCase().includes('sphere')) {
+          const oldMat = child.material
+          const newMat = new MeshStandardMaterial({
+            color: oldMat.color,
+            map: oldMat.map,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+            metalness: 0.0,
+            roughness: 0.3,
+            side: DoubleSide,
+            alphaTest: 0,
+          })
+          child.material = newMat
+          child.renderOrder = 1 // Ensure it renders after opaque objects
+        }
+      })
 
       screensA.value = foundScreensA
       screensB.value = foundScreensB
 
-      const wrapperA = wrapAndNormalizeModel(sceneA)
-      const wrapperB = wrapAndNormalizeModel(sceneB)
-
-      wrapperA.updateMatrixWorld(true)
-      wrapperB.updateMatrixWorld(true)
-
-      const dataA = analyzeModel(sceneA)
-      const dataB = analyzeModel(sceneB)
-
-      // Inject Custom Hotspots
-      const addCustomHotspots = (
-        key: 'a' | 'b',
-        targetRoot: Object3D,
-        data: ModelAnalysis,
-      ) => {
+      // Inject Custom Hotspots (Keep this feature from Compare)
+      const injectCustomHotspots = (key: 'a' | 'b', targetRoot: Object3D) => {
         const list = CONSTANTS.customHotspots?.[key]
         if (!list) {
-          return
+          return []
         }
 
+        const out: InteractableItem[] = []
         list.forEach((def, idx) => {
           const dummy = new Group()
           dummy.name = `custom-hotspot-${key}-${idx}`
           dummy.position.set(...(def.pos as [number, number, number]))
-
-          // Add to scene so it moves with parent
           targetRoot.add(dummy)
 
-          // Register as interactable
-          data.interactables.push({
+          out.push({
             id: dummy.uuid,
             label: def.label,
             position: [def.pos[0], def.pos[1], def.pos[2]],
             object: dummy as any,
             type: 'button',
           })
-
-          // Register for glints
-          data.buttons.push(dummy as any)
         })
+        return out
       }
 
-      addCustomHotspots('a', sceneA, dataA)
-      addCustomHotspots('b', sceneB, dataB)
+      interactablesA.value = injectCustomHotspots('a', sceneA)
+      interactablesB.value = injectCustomHotspots('b', sceneB)
 
-      if (renderer.value) {
-        ;[...dataA.textures, ...dataB.textures].forEach((t) =>
-          renderer.value.initTexture(t),
-        )
-      }
+      modelA.value = markRaw(sceneA)
+      modelB.value = markRaw(sceneB)
 
-      modelA.value = markRaw(wrapperA)
-      modelB.value = markRaw(wrapperB)
-
-      buttonsA.value = dataA.buttons
-      speakersA.value = dataA.speakers
-      emissiveA.value = dataA.emissives
-      interactablesA.value = dataA.interactables
-
-      buttonsB.value = dataB.buttons
-      speakersB.value = dataB.speakers
-      emissiveB.value = dataB.emissives
-      interactablesB.value = dataB.interactables
+      // Use Interactables for Glints (Compare Style)
+      buttonsA.value = interactablesA.value.map((i) => i.object)
+      buttonsB.value = interactablesB.value.map((i) => i.object)
 
       state.value = 'ready'
     } catch (err) {

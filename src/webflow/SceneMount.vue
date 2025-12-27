@@ -36,9 +36,7 @@ const active = computed(() => isVisible.value && hasSize.value)
 
 const reducedMotion = ref(prefersReducedMotion())
 
-const device = computed(() =>
-  getDeviceClassFromWidth(windowWidth.value),
-)
+const device = computed(() => getDeviceClassFromWidth(windowWidth.value))
 
 const quality = computed<QualityTier>(() => {
   const fallback = reducedMotion.value ? 'low' : guessQualityTier()
@@ -59,15 +57,14 @@ const state = ref<LoaderState>('loading')
 const onSceneState = (next: LoaderState) => {
   state.value = next
   props.container.dataset.tresState = next
-  
+
   console.log('[SceneMount] State:', next, 'Device:', device.value)
 
   // Determine if we should reveal the canvas (fade out proxy).
   // Hero/Arcade scenes strictly skip loading on mobile/tablet (relying on the static BG).
   // Compare scenes load on all devices.
-  const shouldReveal = 
-    device.value === 'desktop' || 
-    props.config.scene === 'compare-duo'
+  const shouldReveal =
+    device.value === 'desktop' || props.config.scene === 'compare-duo'
 
   if (next === 'ready' && shouldReveal) {
     console.log('[SceneMount] Fading out proxy')
@@ -78,8 +75,12 @@ const onSceneState = (next: LoaderState) => {
 }
 
 const sceneComponent = computed(() => {
-  if (props.config.scene === 'compare-duo') { return SceneCompareDuo }
-  if (props.config.scene === 'arcade-duo') { return SceneArcadeDuo }
+  if (props.config.scene === 'compare-duo') {
+    return SceneCompareDuo
+  }
+  if (props.config.scene === 'arcade-duo') {
+    return SceneArcadeDuo
+  }
   return SceneHeroDuo
 })
 
@@ -124,11 +125,14 @@ onMounted(() => {
       }
     }
   })
-  mo.observe(props.container, { attributes: true, attributeFilter: ['data-toggle'] })
+  mo.observe(props.container, {
+    attributes: true,
+    attributeFilter: ['data-toggle'],
+  })
 
   const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
   if (mq) {
-    rmListener = e => (reducedMotion.value = e.matches)
+    rmListener = (e) => (reducedMotion.value = e.matches)
     mq.addEventListener?.('change', rmListener)
   }
 })
@@ -137,33 +141,35 @@ onUnmounted(() => {
   mo?.disconnect()
   SharedObserver.unobserveResize(props.container)
   SharedObserver.unobserveIntersection(props.container)
-  
+
   if (resizeListener) {
     window.removeEventListener('resize', resizeListener)
   }
 
   const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)')
-  if (mq && rmListener) { mq.removeEventListener?.('change', rmListener) }
+  if (mq && rmListener) {
+    mq.removeEventListener?.('change', rmListener)
+  }
 })
 
-const dpr = computed<[number, number]>(() => [1, Math.min(window.devicePixelRatio, 2.5)])
+const dpr = computed<[number, number]>(() => [
+  1,
+  Math.min(window.devicePixelRatio, 2),
+])
 
 // Static container style
 const containerStyle = {
   width: '100%',
   height: '100%',
-  display: 'block'
+  display: 'block',
 }
 </script>
 
 <template>
-  <div 
-    class="scene-wrapper" 
-    :style="containerStyle"
-  >
-    <div 
-      class="bg-proxy" 
-      :style="bgStyle" 
+  <div class="scene-wrapper" :style="containerStyle">
+    <div
+      class="bg-proxy"
+      :style="bgStyle"
       :class="{ 'fade-out': !proxyVisible }"
     ></div>
 

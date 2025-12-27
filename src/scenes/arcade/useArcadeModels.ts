@@ -1,10 +1,12 @@
 import { ref, shallowRef, type Ref } from 'vue'
-import type { Material, Mesh, Object3D } from 'three'
-import type { LoaderState, QualityTier, DeviceClass } from '../../shared/types'
+import { type Material, type Mesh, MeshStandardMaterial, type Object3D } from 'three'
+import type { LoaderState, QualityTier, DeviceClass, WebflowSceneConfig } from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
 import { disposeObject3D } from '../../three/dispose'
 
 export function useArcadeModels(
+  config: WebflowSceneConfig,
+  quality: QualityTier,
   renderer: any,
   device: Ref<DeviceClass>,
 ) {
@@ -12,9 +14,41 @@ export function useArcadeModels(
   const errorMessage = ref<string | null>(null)
   const modelA = shallowRef<Object3D | null>(null)
   const modelB = shallowRef<Object3D | null>(null)
+  const buttonsA = shallowRef<Object3D[]>([])
+  const buttonsB = shallowRef<Object3D[]>([])
 
   const LAYER_A = 11
   const LAYER_B = 12
+
+  function collectRandomGlintTargets(root: any, count = 8) {
+    const candidates: Object3D[] = []
+
+    // 1. Collect all valid meshes (exclude glass/screens)
+    root.traverse((obj: any) => {
+      if ((obj as any).isMesh) {
+        const name = obj.name.toLowerCase()
+        if (
+          !name.includes('glass') &&
+          !name.includes('screen') &&
+          !name.includes('window') &&
+          !name.includes('display')
+        ) {
+          candidates.push(obj)
+        }
+      }
+    })
+
+    // 2. Pick random subset
+    const targets: Object3D[] = []
+    // Shuffle
+    for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    // Take top N
+    return candidates.slice(0, count)
+  }
 
   function collectEmissiveMaterials(root: Object3D) {
     interface EmissiveEntry {
@@ -67,20 +101,17 @@ export function useArcadeModels(
     })
   }
 
-  async function loadModels(
-    urlA: string | undefined,
-    urlB: string | undefined,
-    quality: QualityTier,
-    emissive: number,
+  async function loadModels(props: {
+    emissive: number
     envIntensity: number
-  ): Promise<void> {
+  }): Promise<void> {
     // Skip loading on mobile/tablet for performance/design
     if (device.value === 'mobile' || device.value === 'tablet') {
       state.value = 'ready'
       return
     }
 
-    if (!urlA || !urlB) {
+    if (!config.modelA || !config.modelB) {
       errorMessage.value = 'Missing models in config'
       state.value = 'error'
       return
@@ -97,21 +128,21 @@ export function useArcadeModels(
     try {
       const [gltfA, gltfB] = await Promise.all([
         loadGLTFWithTweaks({
-          url: urlA,
+          url: config.modelA,
           draco: true,
           debug: false,
           quality,
-          emissiveIntensity: emissive,
-          envMapIntensity: envIntensity,
+          emissiveIntensity: props.emissive,
+          envMapIntensity: props.envIntensity,
           renderer: renderer.value,
         }),
         loadGLTFWithTweaks({
-          url: urlB,
+          url: config.modelB,
           draco: true,
           debug: false,
           quality,
-          emissiveIntensity: emissive,
-          envMapIntensity: envIntensity,
+          emissiveIntensity: props.emissive,
+          envMapIntensity: props.envIntensity,
           renderer: renderer.value,
         }),
       ])
@@ -122,7 +153,10 @@ export function useArcadeModels(
       setLayerRecursive(sceneA, LAYER_A)
       setLayerRecursive(sceneB, LAYER_B)
 
-      const polishMaterials = (obj: Object3D) => {
+      const foundScreensA: any[] = []
+      const foundScreensB: any[] = []
+
+      const polishMaterials = (obj: Object3D, targetScreens: any[]) => {
         obj.traverse((child: any) => {
           if (child.isMesh && child.material) {
             const m = child.material
@@ -130,6 +164,7 @@ export function useArcadeModels(
 
             // Protect Glass, Screens, and Lights by Name and Property
             if (
+              m.emissiveMap || // SAFETY: If it has an image content, assume it's a screen/sign
               name.includes('glass') ||
               name.includes('window') ||
               name.includes('screen') ||
@@ -139,12 +174,15 @@ export function useArcadeModels(
               name.includes('matrix') ||
               name.includes('9_gms')
             ) {
-               m.envMapIntensity = 0.1
-               m.roughness = 1.0 // No glare
-               m.metalness = 0.0
-               // High static emission for "On" state
-               if (!m.emissiveIntensity || m.emissiveIntensity < 1.0) m.emissiveIntensity = 0.6
-               m.needsUpdate = true
+                                           m.envMapIntensity = 0.0 // No environmental reflections on screens
+                                           m.roughness = 0.2 // Glossy for premium glass look
+                                           m.metalness = 0.0
+                                           // High static emission for "On" state
+                                           m.emissiveIntensity = 1.2
+                                           m.needsUpdate = true
+                                           targetScreens.push(m)
+                                         }            // SKIP SPHERE - It will be handled by a specific fix later
+            if (name.includes('sphere')) {
                return
             }
 
@@ -153,19 +191,19 @@ export function useArcadeModels(
               name.includes('joystick') ||
               name.includes('stick') ||
               name.includes('push') ||
-              m.transparent || 
-              m.opacity < 1.0 || 
-              (m.transmission && m.transmission > 0) || 
+              m.transparent ||
+              m.opacity < 1.0 ||
+              (m.transmission && m.transmission > 0) ||
               m.emissiveIntensity > 0.1 ||
-              m.roughness < 0.1 || 
+              m.roughness < 0.1 ||
               m.roughness >= 0.5
             ) return
 
             // Make it look like High Quality Powder Coated Metal
             m.metalness = 0.8
-            m.roughness = 0.4
-            m.envMapIntensity = envIntensity
-            
+            m.roughness = 0.35
+            m.envMapIntensity = props.envIntensity * 0.8
+
             // Deep Black Fix
             if (
               m.color &&
@@ -175,16 +213,57 @@ export function useArcadeModels(
             ) {
               m.color.setHex(0x000000)
             }
-            
+
             m.needsUpdate = true
           }
         })
       }
-      polishMaterials(sceneA)
-      polishMaterials(sceneB)
+      polishMaterials(sceneA, foundScreensA)
+      polishMaterials(sceneB, foundScreensB)
+
+      // Fix for Plane001 in Model B: Inherit material from Cube_01005
+      let sourceMat: any = null
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name === 'Cube_01005') {
+          sourceMat = child.material
+        }
+
+        if (child.isMesh && child.name === "Cylinder014") {
+          child.material.color.multiplyScalar(0.8)
+        }
+      })
+      if (sourceMat) {
+        sceneB.traverse((child: any) => {
+          if (child.isMesh && child.name === 'Plane001') {
+            child.material = sourceMat.clone()
+            child.material.color.multiplyScalar(0.5)
+          }
+        })
+      }
+
+      // Fix for Sphere in Model B: Replace with fresh transparent material
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name.toLowerCase().includes('sphere')) {
+          const oldMat = child.material
+          const newMat = new MeshStandardMaterial({
+            color: oldMat.color,
+            map: oldMat.map,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+            metalness: 0.0,
+            roughness: 0.3,
+          })
+          child.material = newMat
+        }
+      })
 
       modelA.value = sceneA
       modelB.value = sceneB
+
+      buttonsA.value = collectRandomGlintTargets(sceneA)
+      buttonsB.value = collectRandomGlintTargets(sceneB)
+
       collectEmissiveMaterials(sceneA)
       collectEmissiveMaterials(sceneB)
 
@@ -201,6 +280,8 @@ export function useArcadeModels(
     errorMessage,
     modelA,
     modelB,
+    buttonsA,
+    buttonsB,
     loadModels,
     LAYER_A,
     LAYER_B

@@ -31,12 +31,12 @@ export function disposeObject3D(root: any): void {
       obj.geometry.dispose()
     }
 
-    const material = obj.material as Material | Material[] | undefined
-    if (Array.isArray(material)) {
-      for (const m of material) { disposeMaterial(m) }
-    }
-    else {
-      disposeMaterial(material)
-    }
+    // const material = obj.material as Material | Material[] | undefined
+    // if (Array.isArray(material)) {
+    //   for (const m of material) { disposeMaterial(m) }
+    // }
+    // else {
+    //   disposeMaterial(material)
+    // }
   })
 }

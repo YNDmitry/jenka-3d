@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch, type Ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from 'vue'
 import { type Object3D, Vector2, Vector3 } from 'three'
 import gsap from 'gsap'
 import { useDragRotate } from '../../three/controls'
@@ -14,11 +14,31 @@ export function useCompareInteraction(
   emitChangeMode: (newMode: CompareMode) => void,
   onModelClick?: () => void,
 ) {
+  // Manual Pointer Tracking (Safer than useTres pointer context)
+  const pointer = ref({ x: 0, y: 0 })
+  
+  const updatePointer = (e: MouseEvent) => {
+    pointer.value = {
+      x: (e.clientX / window.innerWidth) * 2 - 1,
+      y: -(e.clientY / window.innerHeight) * 2 + 1
+    }
+  }
+
+  onMounted(() => {
+    window.addEventListener('mousemove', updatePointer)
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('mousemove', updatePointer)
+  })
+
   const camNudge = reactive(new Vector3())
   const fovNudge = ref(0)
   const lookAtRef = reactive(new Vector3(...baseLookAt.value))
 
   // -- 1. Настройка Drag Controls --
+  let dragElement: HTMLElement | null = null
+
   const dragTarget = computed(() => {
     if (mode.value === 'focus-a') {
       return groupA.value
@@ -38,6 +58,14 @@ export function useCompareInteraction(
     damping: 6,
     clampX: [-0.1, 0.6], // Низ нельзя (-0.1), верх чуть-чуть (0.6)
     clampY: [-1.2, 1.2], // Спину нельзя (±1.2 рад)
+    onEnd: () => {
+      document.body.style.cursor = 'grab'
+      document.documentElement.style.cursor = ''
+      if (dragElement) {
+        dragElement.style.cursor = ''
+        dragElement = null
+      }
+    },
   })
 
   // -- 2. Умная логика клика --
@@ -45,6 +73,10 @@ export function useCompareInteraction(
   const CLICK_THRESHOLD = 20
 
   function handlePointerDown(e: any) {
+    // Prevent text selection/default behavior which might override cursor
+    if (e.preventDefault) {
+      e.preventDefault()
+    }
     if (e.stopPropagation) {
       e.stopPropagation()
     }
@@ -54,6 +86,20 @@ export function useCompareInteraction(
 
     if (mode.value !== 'grid' && drag.onPointerDown) {
       drag.onPointerDown(native)
+      // Force cursor immediately with priority
+      document.body.style.setProperty('cursor', 'grabbing', 'important')
+      document.documentElement.style.setProperty('cursor', 'grabbing', 'important')
+      
+      // Capture pointer to keep events and cursor bound to the element
+      if (native.target && typeof native.target.setPointerCapture === 'function') {
+        dragElement = native.target as HTMLElement
+        try {
+          dragElement.setPointerCapture(native.pointerId)
+          dragElement.style.cursor = 'grabbing'
+        } catch (err) {
+          // Ignore if capture fails
+        }
+      }
     }
   }
 
@@ -119,7 +165,7 @@ export function useCompareInteraction(
     camNudge,
     fovNudge,
     lookAtRef,
-    pointer: computed(() => ({ x: 0, y: 0 })),
+    pointer,
     drag,
     resetCamera,
     handlePointerDown,

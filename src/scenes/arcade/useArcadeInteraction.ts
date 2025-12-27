@@ -252,7 +252,7 @@ export function useArcadeInteraction(
 
   const { onBeforeRender } = useLoop()
 
-  onBeforeRender(() => {
+  onBeforeRender(({ elapsed }) => {
     if (!active.value) return
 
     const diff = mouseX.value - mouseXSmoothed.value
@@ -260,13 +260,27 @@ export function useArcadeInteraction(
       mouseXSmoothed.value += diff * 0.08
       if (invalidate) invalidate()
     }
+    
+    // Floating Animation (Cinematic Idle)
+    let floatY = 0
+    let floatRot = 0
+    if (!reducedMotion.value) {
+      // Period ~4s
+      floatY = Math.sin(elapsed * 1.5) * 0.08
+      // Subtle rotation drift
+      floatRot = Math.cos(elapsed * 0.5) * 0.02
+    }
 
     if (modelA.value) {
       const s = stateA
       const o = offsetsA
       const sway = mouseXSmoothed.value * CONSTANTS.animation.rotRange * s.influence.value
-      modelA.value.position.set(s.pos.x, s.pos.y + o.pos.y, s.pos.z)
-      modelA.value.rotation.set(s.rot.x + o.rot.x, s.rot.y - sway + o.rot.y, s.rot.z + o.rot.z)
+      // Apply float only if this model is "in front" (influence > 0.5)
+      const fY = s.influence.value > 0.5 ? floatY : 0
+      const fR = s.influence.value > 0.5 ? floatRot : 0
+      
+      modelA.value.position.set(s.pos.x, s.pos.y + o.pos.y + fY, s.pos.z)
+      modelA.value.rotation.set(s.rot.x + o.rot.x, s.rot.y - sway + o.rot.y + fR, s.rot.z + o.rot.z)
       modelA.value.scale.set(s.scale.x + o.scale.x + hoverState.A, s.scale.y + o.scale.y + hoverState.A, s.scale.z + o.scale.z + hoverState.A)
     }
 
@@ -274,8 +288,12 @@ export function useArcadeInteraction(
       const s = stateB
       const o = offsetsB
       const sway = mouseXSmoothed.value * CONSTANTS.animation.rotRange * s.influence.value
-      modelB.value.position.set(s.pos.x, s.pos.y + o.pos.y, s.pos.z)
-      modelB.value.rotation.set(s.rot.x + o.rot.x, s.rot.y - sway + o.rot.y, s.rot.z + o.rot.z)
+      // Apply float only if this model is "in front" (influence > 0.5)
+      const fY = s.influence.value > 0.5 ? floatY : 0
+      const fR = s.influence.value > 0.5 ? floatRot : 0
+
+      modelB.value.position.set(s.pos.x, s.pos.y + o.pos.y + fY, s.pos.z)
+      modelB.value.rotation.set(s.rot.x + o.rot.x, s.rot.y - sway + o.rot.y + fR, s.rot.z + o.rot.z)
       modelB.value.scale.set(s.scale.x + o.scale.x + hoverState.B, s.scale.y + o.scale.y + hoverState.B, s.scale.z + o.scale.z + hoverState.B)
     }
   })

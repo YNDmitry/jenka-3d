@@ -1,8 +1,8 @@
-import { createApp, type App } from 'vue'
+import { type App, createApp } from 'vue'
 import SceneMount from './SceneMount.vue'
 import './style.css'
 import './annotation.css'
-import type { WebflowSceneConfig, SceneId } from '../shared/types'
+import type { SceneId, WebflowSceneConfig } from '../shared/types'
 import { parseEnumAttr, safeUrl } from '../shared/utils'
 
 // --- Types ---
@@ -24,25 +24,27 @@ declare global {
 
 function parseConfig(el: HTMLElement): WebflowSceneConfig {
   const ds = el.dataset
-  
+
   // Prioritize data-scene, fall back to data-tres if it's a valid type
   const rawType = ds.scene || ds.tres
-  
+
   const scene = parseEnumAttr<SceneId>(
-    rawType || null, 
-    ['hero-duo', 'compare-duo', 'arcade-duo', 'single'], 
-    'hero-duo'
+    rawType || null,
+    ['hero-duo', 'compare-duo', 'arcade-duo', 'single'],
+    'hero-duo',
   )
-  
+
   return {
     scene,
     modelA: safeUrl(ds.modelA || null),
     modelB: safeUrl(ds.modelB || null),
     hdr: safeUrl(ds.hdr || null),
     hideSpinner: ds.hideSpinner !== undefined,
-    exposure: ds.exposure ? parseFloat(ds.exposure) : undefined,
-    bloom: ds.bloom ? parseFloat(ds.bloom) : undefined,
-    envIntensity: ds.envIntensity ? parseFloat(ds.envIntensity) : undefined,
+    exposure: ds.exposure ? Number.parseFloat(ds.exposure) : undefined,
+    bloom: ds.bloom ? Number.parseFloat(ds.bloom) : undefined,
+    envIntensity: ds.envIntensity
+      ? Number.parseFloat(ds.envIntensity)
+      : undefined,
   }
 }
 
@@ -52,33 +54,42 @@ const mountedApps = new Map<HTMLElement, App<Element>>()
 
 export function mountAll() {
   const elements = document.querySelectorAll<HTMLElement>('[data-tres]')
-  
+
   elements.forEach((el) => {
     // 1. Skip if already mounted
-    if (mountedApps.has(el)) return
-    
+    if (mountedApps.has(el)) {
+      return
+    }
+
     const tresAttr = el.dataset.tres || ''
-    
+
     // 2. Validate Marker
-    // Valid cases: 
+    // Valid cases:
     // - data-tres="scene" (generic)
     // - data-tres="hero-duo" (shorthand)
-    const isSpecific = ['hero-duo', 'compare-duo', 'arcade-duo', 'single'].includes(tresAttr)
+    const isSpecific = [
+      'hero-duo',
+      'compare-duo',
+      'arcade-duo',
+      'single',
+    ].includes(tresAttr)
     const isGeneric = ['scene', 'mount', 'canvas'].includes(tresAttr)
-    
-    if (!isSpecific && !isGeneric) return
-    
+
+    if (!isSpecific && !isGeneric) {
+      return
+    }
+
     // 3. Mount
     try {
       const config = parseConfig(el)
       const app = createApp(SceneMount, { container: el, config })
-      
+
       // Inject global debug flag if present
-      // app.provide('debug', isDebugMode()) 
-      
+      // app.provide('debug', isDebugMode())
+
       app.mount(el)
       mountedApps.set(el, app)
-      
+
       // Mark as managed
       el.dataset.tresManaged = 'true'
     } catch (err) {
@@ -125,32 +136,41 @@ if (typeof window !== 'undefined') {
   } else {
     init()
   }
-  
+
   // 3. Smart Mutation Observer
   // Only triggers if a relevant node is added
   const observer = new MutationObserver((mutations) => {
     let shouldMount = false
-    
+
     for (const m of mutations) {
-      if (m.type !== 'childList') continue
-      
+      if (m.type !== 'childList') {
+        continue
+      }
+
       for (const node of Array.from(m.addedNodes)) {
         if (node instanceof HTMLElement) {
           // Check if the node itself is a target or contains targets
-          if (node.matches('[data-tres]') || node.querySelector('[data-tres]')) {
+          if (
+            node.matches('[data-tres]') ||
+            node.querySelector('[data-tres]')
+          ) {
             shouldMount = true
             break
           }
         }
       }
-      if (shouldMount) break
+      if (shouldMount) {
+        break
+      }
     }
-    
-    if (shouldMount) mountAll()
+
+    if (shouldMount) {
+      mountAll()
+    }
   })
-  
-  observer.observe(document.body, { 
-    childList: true, 
-    subtree: true 
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
   })
 }

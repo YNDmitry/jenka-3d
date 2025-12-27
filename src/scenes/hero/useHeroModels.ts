@@ -1,16 +1,23 @@
-import { ref, shallowRef, watch, markRaw, type Ref } from 'vue'
+import { markRaw, ref, type Ref, shallowRef } from 'vue'
 import {
-  type Object3D,
-  SRGBColorSpace,
-  type Mesh,
-  type Material,
   Box3,
+  type Material,
+  Mesh,
+  MeshStandardMaterial,
+  type Object3D,
 } from 'three'
-import type { LoaderState, QualityTier, DeviceClass } from '../../shared/types'
+import type {
+  DeviceClass,
+  LoaderState,
+  QualityTier,
+  WebflowSceneConfig,
+} from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
 import { disposeObject3D } from '../../three/dispose'
 
 export function useHeroModels(
+  config: WebflowSceneConfig,
+  quality: QualityTier,
   renderer: any,
   device: Ref<DeviceClass>,
 ) {
@@ -54,12 +61,15 @@ export function useHeroModels(
         const mapName = mat.emissiveMap?.name || ''
         const isExcluded = /nayax/i.test(matName) || /nayax/i.test(mapName)
         const isScreenName =
-          !isExcluded && (screenRegex.test(matName) || screenRegex.test(mapName))
+          !isExcluded &&
+          (screenRegex.test(matName) || screenRegex.test(mapName))
         const isEmissiveName = /emiss|emit|neon|glow/i.test(matName)
 
         if (mat.emissiveMap || isScreenName || isEmissiveName) {
           const base =
-            typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1
+            typeof mat.emissiveIntensity === 'number'
+              ? mat.emissiveIntensity
+              : 1
           const boost = isScreenName ? 2.5 : 1.5
           out.push({
             material: mat,
@@ -74,7 +84,7 @@ export function useHeroModels(
 
   function collectRandomGlintTargets(root: any, count = 12) {
     const candidates: Object3D[] = []
-    
+
     // 1. Collect all valid meshes (exclude glass/screens)
     root.traverse((obj: any) => {
       if ((obj as any).isMesh) {
@@ -94,28 +104,25 @@ export function useHeroModels(
     const targets: Object3D[] = []
     // Shuffle
     for (let i = candidates.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[candidates[i], candidates[j]] = [candidates[j], candidates[i]]
     }
-    
+
     // Take top N
     return candidates.slice(0, count)
   }
 
-  async function loadModels(
-    urlA: string | undefined,
-    urlB: string | undefined,
-    quality: QualityTier,
-    emissive: number,
+  async function loadModels(props: {
+    emissive: number
     envIntensity: number
-  ): Promise<void> {
+  }): Promise<void> {
     // Skip loading on mobile/tablet for performance/design
     if (device.value === 'mobile' || device.value === 'tablet') {
       state.value = 'ready'
       return
     }
 
-    if (!urlA || !urlB) {
+    if (!config.modelA || !config.modelB) {
       errorMessage.value = 'Missing models in config'
       state.value = 'error'
       console.error('[useHeroModels] Missing models')
@@ -125,29 +132,33 @@ export function useHeroModels(
     state.value = 'loading'
     errorMessage.value = null
 
-    if (modelA.value) disposeObject3D(modelA.value)
-    if (modelB.value) disposeObject3D(modelB.value)
+    if (modelA.value) {
+      disposeObject3D(modelA.value)
+    }
+    if (modelB.value) {
+      disposeObject3D(modelB.value)
+    }
     modelA.value = null
     modelB.value = null
 
     try {
       const [gltfA, gltfB] = await Promise.all([
         loadGLTFWithTweaks({
-          url: urlA,
+          url: config.modelA,
           draco: true,
           debug: false,
           quality,
-          emissiveIntensity: emissive,
-          envMapIntensity: envIntensity,
+          emissiveIntensity: props.emissive,
+          envMapIntensity: props.envIntensity,
           renderer: renderer.value,
         }),
         loadGLTFWithTweaks({
-          url: urlB,
+          url: config.modelB,
           draco: true,
           debug: false,
           quality,
-          emissiveIntensity: emissive,
-          envMapIntensity: envIntensity,
+          emissiveIntensity: props.emissive,
+          envMapIntensity: props.envIntensity,
           renderer: renderer.value,
         }),
       ])
@@ -182,13 +193,18 @@ export function useHeroModels(
               name.includes('matrix') ||
               name.includes('9_gms')
             ) {
-               m.envMapIntensity = 0.2
-               m.roughness = 1.0 // No glare
-               m.metalness = 0.0
-               // High static emission for "On" state
-               if (!m.emissiveIntensity || m.emissiveIntensity < 1.0) m.emissiveIntensity = 0.6
-               m.needsUpdate = true
-               targetScreens.push(m)
+              m.envMapIntensity = 0.0
+              m.roughness = 0.2 // Glossy for premium glass look
+              m.metalness = 0.0
+              // High static emission for "On" state
+              m.emissiveIntensity = 0.2
+              m.needsUpdate = true
+              targetScreens.push(m)
+              return
+            }
+            
+            // SKIP SPHERE - It will be handled by a specific fix later
+            if (name.includes('sphere')) {
                return
             }
 
@@ -198,19 +214,21 @@ export function useHeroModels(
               name.includes('joystick') ||
               name.includes('stick') ||
               name.includes('push') ||
-              m.transparent || 
-              m.opacity < 1.0 || 
-              (m.transmission && m.transmission > 0) || 
+              m.transparent ||
+              m.opacity < 1.0 ||
+              (m.transmission && m.transmission > 0) ||
               m.emissiveIntensity > 0.1 ||
               m.roughness < 0.1 || // Skip already shiny things (Glass/Screens)
-              m.roughness >= 0.5   // Skip matte plastic/rubber (Buttons/Joysticks)
-            ) return
+              m.roughness >= 0.5 // Skip matte plastic/rubber (Buttons/Joysticks)
+            ) {
+              return
+            }
 
             // Make it look like High Quality Powder Coated Metal
             m.metalness = 0.8
-            m.roughness = 0.4
-            m.envMapIntensity = envIntensity
-            
+            m.roughness = 0.35
+            m.envMapIntensity = props.envIntensity * 1.2
+
             // Deep Black Fix
             if (
               m.color &&
@@ -220,23 +238,56 @@ export function useHeroModels(
             ) {
               m.color.setHex(0x000000)
             }
-            
+
             m.needsUpdate = true
           }
         })
       }
-      
+
       const foundScreensA: Material[] = []
       const foundScreensB: Material[] = []
-      
+
       polishMaterials(sceneA, foundScreensA)
       polishMaterials(sceneB, foundScreensB)
-      
+
+      // Fix for Plane001 in Model B: Inherit material from Cube_01005
+      let sourceMat: any = null
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name === 'Cube_01005') {
+          sourceMat = child.material
+        }
+      })
+      if (sourceMat) {
+        sceneB.traverse((child: any) => {
+          if (child.isMesh && child.name === 'Plane001') {
+            child.material = sourceMat.clone()
+            child.material.color.multiplyScalar(0.5)
+          }
+        })
+      }
+
+      // Fix for Sphere in Model B: Replace with fresh transparent material
+      sceneB.traverse((child: any) => {
+        if (child.isMesh && child.name.toLowerCase().includes('sphere')) {
+          const oldMat = child.material
+          const newMat = new MeshStandardMaterial({
+            color: oldMat.color,
+            map: oldMat.map,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+            metalness: 0.0,
+            roughness: 0.3,
+          })
+          child.material = newMat
+        }
+      })
+
       screensA.value = foundScreensA
       screensB.value = foundScreensB
 
       // Pre-upload happens inside loadGLTFWithTweaks now via optimizeModel
-      
+
       modelA.value = markRaw(gltfA.scene) as any
       modelB.value = markRaw(gltfB.scene) as any
 
@@ -267,6 +318,6 @@ export function useHeroModels(
     boundsB,
     loadModels,
     LAYER_A,
-    LAYER_B
+    LAYER_B,
   }
 }

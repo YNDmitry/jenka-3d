@@ -229,6 +229,14 @@ const {
 onMounted(() => {
   window.addEventListener('jenka-set-mode', onExternalSetMode)
   ctx = gsap.context(() => {})
+
+  // Restore mode from DOM if present
+  if (props.container) {
+    const saved = props.container.getAttribute('data-mode')
+    if (saved && (saved === 'focus-a' || saved === 'focus-b')) {
+      handleModeChange(saved as CompareMode, false)
+    }
+  }
 })
 
 onUnmounted(() => {
@@ -320,15 +328,15 @@ const lightConfig = computed(() => {
     return {
       key: {
         pos: [-3.5, 5.5, 6.5] as [number, number, number],
-        intensity: 2.0 * intensityMod,
+        intensity: 0.7 * intensityMod,
       },
       fill: {
         pos: [6.5, 2.5, 4.0] as [number, number, number],
-        intensity: 0.5 * intensityMod,
+        intensity: 0.1 * intensityMod,
       },
       rim: {
         pos: [0.0, 4.0, -6.0] as [number, number, number],
-        intensity: 1.5 * intensityMod,
+        intensity: 1.0 * intensityMod,
       },
     }
   }
@@ -336,15 +344,15 @@ const lightConfig = computed(() => {
   return {
     key: {
       pos: [3.5, 5.5, 6.5] as [number, number, number],
-      intensity: 2.0 * intensityMod,
+      intensity: 0.7 * intensityMod,
     },
     fill: {
       pos: [-6.5, 2.5, 4.0] as [number, number, number],
-      intensity: 0.5 * intensityMod,
+      intensity: 0.1 * intensityMod,
     },
     rim: {
       pos: [0.0, 4.0, -6.0] as [number, number, number],
-      intensity: 1.5 * intensityMod,
+      intensity: 1.0 * intensityMod,
     },
   }
 })
@@ -504,7 +512,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   </Suspense>
 
   <!-- Professional Studio Lighting -->
-  <TresAmbientLight :intensity="0.05" />
+  <TresAmbientLight :intensity="0.5" />
 
   <!-- Key Light: Main source -->
   <TresDirectionalLight
@@ -678,9 +686,9 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         :luminance-smoothing="0.2"
         mipmap-blur
       />
-      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
+      <!-- <BrightnessContrastPmndrs :contrast="0.01" :brightness="0.0" /> -->
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
-      <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
+      <!-- <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" /> -->
       <SMAA />
     </EffectComposerPmndrs>
   </Suspense>

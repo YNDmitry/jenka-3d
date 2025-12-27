@@ -196,6 +196,12 @@ export function useCompareLayout(
       onComplete: () => {
         if (targetOpacity === 0) {
           obj.visible = false
+        } else if (targetOpacity === 1) {
+           // Restore opacity performance and correct rendering for solid objects
+           mats.forEach(m => {
+             m.transparent = false
+             m.needsUpdate = true
+           })
         }
       }
     })

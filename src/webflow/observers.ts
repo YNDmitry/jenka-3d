@@ -11,25 +11,33 @@ let resizeObserver: ResizeObserver | null = null
 let intersectObserver: IntersectionObserver | null = null
 
 function ensureResizeObserver() {
-  if (resizeObserver) return
+  if (resizeObserver) {
+    return
+  }
   resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       const cb = resizeCallbacks.get(entry.target)
-      if (cb) cb(entry)
+      if (cb) {
+        cb(entry)
+      }
     }
   })
 }
 
 function ensureIntersectObserver() {
-  if (intersectObserver) return
+  if (intersectObserver) {
+    return
+  }
   intersectObserver = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         const cb = intersectCallbacks.get(entry.target)
-        if (cb) cb(entry)
+        if (cb) {
+          cb(entry)
+        }
       }
     },
-    { root: null, rootMargin: '200px 0px', threshold: [0, 0.1] }
+    { root: null, rootMargin: '200px 0px', threshold: [0, 0.1] },
   )
 }
 
@@ -41,7 +49,9 @@ export const SharedObserver = {
   },
 
   unobserveResize(el: Element) {
-    if (!resizeObserver) return
+    if (!resizeObserver) {
+      return
+    }
     resizeCallbacks.delete(el)
     resizeObserver.unobserve(el)
   },
@@ -53,7 +63,9 @@ export const SharedObserver = {
   },
 
   unobserveIntersection(el: Element) {
-    if (!intersectObserver) return
+    if (!intersectObserver) {
+      return
+    }
     intersectCallbacks.delete(el)
     intersectObserver.unobserve(el)
   },

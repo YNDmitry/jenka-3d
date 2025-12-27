@@ -3,6 +3,8 @@ import {
   Color,
   LinearSRGBColorSpace,
   LoadingManager,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
   NoColorSpace,
   SRGBColorSpace,
 } from 'three'
@@ -70,7 +72,7 @@ function setTextureAnisotropy(
   }
   const max = renderer.capabilities?.getMaxAnisotropy?.() ?? 1
   // Optimization: Disable anisotropy (1) on low tier to save bandwidth
-  const target = quality === 'low' ? 1 : quality === 'med' ? 2 : 8
+  const target = quality === 'low' ? 1 : quality === 'med' ? 4 : 16
   const val = clamp(target, 1, max)
 
   if (tex.anisotropy !== val) {
@@ -131,10 +133,45 @@ export function optimizeModel(
       ? mesh.material
       : [mesh.material]
 
-    for (const mat of materials) {
+    for (let i = 0; i < materials.length; i++) {
+      let mat = materials[i]
       if (!mat) {
         continue
       }
+      
+      const name = (mat.name as string | undefined) ?? ''
+      const screenish = isLikelyScreenMaterial(name)
+      const glassish = isLikelyGlassMaterial(name)
+
+      // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
+      // Adds Clearcoat for "Car Paint" look on body parts
+      if (
+        quality === 'high' &&
+        !screenish &&
+        !glassish &&
+        (mat as any).isMeshStandardMaterial &&
+        !(mat as any).isMeshPhysicalMaterial &&
+        !mat.transparent
+      ) {
+        const standard = mat as MeshStandardMaterial
+        const physical = new MeshPhysicalMaterial()
+        MeshStandardMaterial.prototype.copy.call(physical, standard)
+        
+        // Clearcoat settings for premium look
+        physical.clearcoat = 1.0
+        physical.clearcoatRoughness = 0.1
+        
+        // Replace
+        mat = physical
+        materials[i] = physical
+        
+        if (Array.isArray(mesh.material)) {
+          mesh.material[i] = physical
+        } else {
+          mesh.material = physical
+        }
+      }
+
       const material: any = mat
 
       // 1. Color Space
@@ -160,9 +197,6 @@ export function optimizeModel(
       uploadTexture(material.aoMap, r)
 
       // 3. Emissive Boost
-      const name = (material.name as string | undefined) ?? ''
-      const screenish = isLikelyScreenMaterial(name)
-
       if (
         material.emissiveMap &&
         material.emissive &&
@@ -182,7 +216,6 @@ export function optimizeModel(
       }
 
       // 4. Glass Tweaks
-      const glassish = isLikelyGlassMaterial(name)
       if (glassish) {
         material.transmission = 0
         material.thickness = 0.5

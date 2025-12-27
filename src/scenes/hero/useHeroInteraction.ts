@@ -69,7 +69,7 @@ export function useHeroInteraction(
 
   const { onBeforeRender } = useLoop()
 
-  onBeforeRender(() => {
+  onBeforeRender(({ elapsed }) => {
     if (!active.value) {
       return
     }
@@ -77,16 +77,34 @@ export function useHeroInteraction(
     // Parallax Smoothing
     const dx = targetParallax.x - currentParallax.x
     const dy = targetParallax.y - currentParallax.y
+    
+    // Floating / Breathing Animation (Cinematic Idle)
+    let floatY = 0
+    let floatX = 0
+    if (!reducedMotion.value) {
+      // Slow, subtle vertical float (period ~6s)
+      floatY = Math.sin(elapsed * 1.0) * 0.05
+      // Very slow horizontal drift (period ~10s)
+      floatX = Math.cos(elapsed * 0.6) * 0.03
+    }
 
-    if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) {
+    const hasParallax = Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001
+    const shouldUpdate = hasParallax || !reducedMotion.value
+
+    if (shouldUpdate) {
       const easing = CONSTANTS.parallax.easing
       currentParallax.x += dx * easing
       currentParallax.y += dy * easing
 
       if (cameraRef.value) {
         const baseCamPos = CONSTANTS.layout.camPos[device.value] || CONSTANTS.layout.camPos.desktop
-        cameraRef.value.position.x = baseCamPos[0] + currentParallax.x
-        cameraRef.value.position.y = baseCamPos[1] + currentParallax.y
+        
+        // Combine Base + Parallax + Float
+        // Float is suppressed slightly when moving mouse vigorously to keep control feeling tight
+        const suppression = Math.max(0, 1 - (Math.abs(dx) + Math.abs(dy)) * 50)
+        
+        cameraRef.value.position.x = baseCamPos[0] + currentParallax.x + (floatX * suppression)
+        cameraRef.value.position.y = baseCamPos[1] + currentParallax.y + (floatY * suppression)
       }
 
       if (invalidate) {

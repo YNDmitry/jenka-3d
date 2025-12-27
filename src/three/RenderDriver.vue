@@ -13,20 +13,21 @@ const props = defineProps<{
 const { invalidate, renderer } = useTres()
 
 // Configuration
-const IDLE_TIMEOUT_MS = 2000
-const BASE_FPS = 60
+const BOOST_WINDOW_MS = 2000
+const SLEEP_WINDOW_MS = 5000
+const BASE_FPS = 24 // Cinematic idle
 
 const idleFpsLimit = computed(() => {
   if (!props.active) { return 0 }
   const fps = getTargetFpsForQuality(props.quality)
   const limit = props.reducedMotion ? Math.min(30, fps) : fps
-  // In idle state, we clamp even harder to save battery
   return props.reducedMotion ? 15 : Math.min(BASE_FPS, limit)
 })
 
 // State
 let rafId: number | null = null
 let boostUntil = 0
+let sleepAt = 0
 let lastFrameTime = 0
 
 // The Loop
@@ -37,9 +38,8 @@ function loop(now: number) {
   }
 
   // 1. BOOST MODE: Unlock FPS
-  // If user interacted recently, we want smoothness, but not necessarily 120Hz/144Hz
   if (now < boostUntil) {
-    const boostFps = Math.min(120, getTargetFpsForQuality(props.quality))
+    const boostFps = getTargetFpsForQuality(props.quality)
     const interval = 1000 / boostFps
     const delta = now - lastFrameTime
 
@@ -52,8 +52,14 @@ function loop(now: number) {
     return
   }
 
-  // 2. IDLE MODE: Cap FPS
-  // If idle, throttle to 60fps or lower
+  // 2. IDLE/SLEEP MODE
+  // If we've passed the sleep timer, stop rendering entirely (0 FPS)
+  if (now > sleepAt) {
+    rafId = requestAnimationFrame(loop)
+    return
+  }
+
+  // Otherwise, run at BASE_FPS (Cinematic Idle) to keep glints/floating alive
   const targetFps = idleFpsLimit.value
   const interval = 1000 / targetFps
   const delta = now - lastFrameTime
@@ -70,11 +76,10 @@ function boost() {
   const now = performance.now()
   const alreadyBoosting = now < boostUntil
 
-  // Extend boost time
-  boostUntil = now + IDLE_TIMEOUT_MS
+  boostUntil = now + BOOST_WINDOW_MS
+  sleepAt = now + SLEEP_WINDOW_MS
 
-  // Only force immediate render if we weren't already boosting
-  // to avoid spamming invalidate() and messing up frame deltas
+  // Force immediate frame if waking up
   if (!alreadyBoosting) {
     invalidate()
   }

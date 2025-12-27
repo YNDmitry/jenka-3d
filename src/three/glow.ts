@@ -32,36 +32,48 @@ function createGlintTexture(): Texture {
   canvas.width = size
   canvas.height = size
   const ctx = canvas.getContext('2d')
-  if (!ctx) { throw new Error('2D context not available') }
+  if (!ctx) {
+    throw new Error('2D context not available')
+  }
 
   const cx = size / 2
   const cy = size / 2
 
-  // Soft glow center
+  // 1. Core Glow (Soft)
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2)
   g.addColorStop(0, 'rgba(255,255,255,1)')
-  g.addColorStop(0.15, 'rgba(255,255,255,0.6)')
-  g.addColorStop(0.5, 'rgba(255,255,255,0.1)')
+  g.addColorStop(0.2, 'rgba(255,255,255,0.4)')
+  g.addColorStop(0.6, 'rgba(255,255,255,0.05)')
   g.addColorStop(1, 'rgba(255,255,255,0)')
   ctx.fillStyle = g
   ctx.fillRect(0, 0, size, size)
 
-  // Star cross
+  // 2. Anamorphic Flare (Wide Horizontal)
   ctx.save()
   ctx.translate(cx, cy)
+
+  // Horizontal Beam (very wide, thin)
   ctx.beginPath()
-  // Horizontal tapered rect
-  ctx.moveTo(-size * 0.4, 0)
-  ctx.bezierCurveTo(-size * 0.1, -1, size * 0.1, -1, size * 0.4, 0)
-  ctx.bezierCurveTo(size * 0.1, 1, -size * 0.1, 1, -size * 0.4, 0)
-
-  // Vertical tapered rect
-  ctx.moveTo(0, -size * 0.4)
-  ctx.bezierCurveTo(-1, -size * 0.1, -1, size * 0.1, 0, size * 0.4)
-  ctx.bezierCurveTo(1, size * 0.1, 1, -size * 0.1, 0, -size * 0.4)
-
-  ctx.fillStyle = 'rgba(255,255,255,0.85)'
+  ctx.moveTo(-size * 0.48, 0)
+  ctx.bezierCurveTo(-size * 0.1, -1.5, size * 0.1, -1.5, size * 0.48, 0)
+  ctx.bezierCurveTo(size * 0.1, 1.5, -size * 0.1, 1.5, -size * 0.48, 0)
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'
   ctx.fill()
+
+  // Vertical Beam (shorter, thicker than horiz but still sharp)
+  ctx.beginPath()
+  ctx.moveTo(0, -size * 0.3)
+  ctx.bezierCurveTo(-1.5, -size * 0.05, -1.5, size * 0.05, 0, size * 0.3)
+  ctx.bezierCurveTo(1.5, size * 0.05, 1.5, -size * 0.05, 0, -size * 0.3)
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'
+  ctx.fill()
+
+  // Hot center
+  ctx.beginPath()
+  ctx.arc(0, 0, 2, 0, Math.PI * 2)
+  ctx.fillStyle = '#FFF'
+  ctx.fill()
+
   ctx.restore()
 
   const tex = new CanvasTexture(canvas)
@@ -71,7 +83,7 @@ function createGlintTexture(): Texture {
 
 function buildDefaultPaths(
   bounds: Box3,
-): Array<{ a: Vector3, b: Vector3, c: Vector3 }> {
+): Array<{ a: Vector3; b: Vector3; c: Vector3 }> {
   const min = bounds.min
   const max = bounds.max
   const size = new Vector3()
@@ -110,7 +122,7 @@ export interface AttachedGlintsOptions {
 export function createAttachedGlints(
   options: AttachedGlintsOptions,
 ): GlintsController {
-  const { targets, color = 0xFFFFFF, size = 0.18, opacity = 0.9 } = options
+  const { targets, color = 0xffffff, size = 0.18, opacity = 0.9 } = options
 
   const tex = createGlintTexture()
   // We don't use a main group for transform, but we can return one if needed for consistency.
@@ -179,13 +191,13 @@ export function createAttachedGlints(
       // "Chaotic" Sparkle Effect
       // Combine two sine waves with prime number frequencies to reduce repetition pattern
       const t1 = elapsed * g.speed + g.phase
-      const t2 = elapsed * (g.speed * 0.7) + (g.phase * 1.3)
-      
+      const t2 = elapsed * (g.speed * 0.7) + g.phase * 1.3
+
       // Main pulse * slower modulator
       const wave = Math.sin(t1 * 3.0) * (Math.sin(t2) * 0.5 + 0.5)
-      
+
       // Sharpen the peaks
-      const pulse = Math.max(0, wave) ** 6.0 
+      const pulse = Math.max(0, wave) ** 6.0
 
       g.sprite.material.opacity = (0.1 + 0.9 * pulse) * opacity
 
@@ -208,7 +220,9 @@ export function createAttachedGlints(
     setEnabled: (v: boolean) => {
       enabled = v
       if (!enabled) {
-        for (const g of glints) { g.sprite.material.opacity = 0 }
+        for (const g of glints) {
+          g.sprite.material.opacity = 0
+        }
       }
     },
     dispose,
@@ -219,7 +233,7 @@ export function createGlints(options: GlintsOptions): GlintsController {
   const {
     bounds,
     count = 3,
-    color = 0xFFFFFF,
+    color = 0xffffff,
     size = 0.18,
     speed = 0.24,
     opacity = 0.9,
@@ -259,7 +273,9 @@ export function createGlints(options: GlintsOptions): GlintsController {
 
   const update = (elapsed: number) => {
     if (!enabled) {
-      for (const g of glints) { g.sprite.material.opacity = 0 }
+      for (const g of glints) {
+        g.sprite.material.opacity = 0
+      }
       return
     }
     for (const g of glints) {
@@ -280,7 +296,9 @@ export function createGlints(options: GlintsOptions): GlintsController {
 
   const dispose = () => {
     tex.dispose()
-    for (const g of glints) { g.sprite.material.dispose() }
+    for (const g of glints) {
+      g.sprite.material.dispose()
+    }
   }
 
   return {
@@ -289,7 +307,9 @@ export function createGlints(options: GlintsOptions): GlintsController {
     setEnabled: (v: boolean) => {
       enabled = v
       if (!enabled) {
-        for (const g of glints) { g.sprite.material.opacity = 0 }
+        for (const g of glints) {
+          g.sprite.material.opacity = 0
+        }
       }
     },
     dispose,

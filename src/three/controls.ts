@@ -21,8 +21,8 @@ export interface DragRotateApi {
   isDragging: Ref<boolean>
   onPointerDown: (event: any) => void
   cancel: () => void
-  setTargetRotation: (rotation: { x?: number, y?: number }) => void
-  getTargetRotation: () => { x: number, y: number }
+  setTargetRotation: (rotation: { x?: number; y?: number }) => void
+  getTargetRotation: () => { x: number; y: number }
 }
 
 export function useDragRotate(options: DragRotateOptions): DragRotateApi {
@@ -55,7 +55,7 @@ export function useDragRotate(options: DragRotateOptions): DragRotateApi {
     onEnd?.()
   }
 
-  const setTargetRotation = (rot: { x?: number, y?: number }) => {
+  const setTargetRotation = (rot: { x?: number; y?: number }) => {
     if (typeof rot.x === 'number') {
       rotationTarget.x = rot.x
     }
@@ -76,6 +76,13 @@ export function useDragRotate(options: DragRotateOptions): DragRotateApi {
     if (!isDragging.value) {
       return
     }
+    
+    // Failsafe: If mouse button is not held, stop dragging
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      cancel()
+      return
+    }
+
     if (pointerId !== null && e.pointerId !== pointerId) {
       return
     }
