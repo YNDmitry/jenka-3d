@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { TresCanvas } from '@tresjs/core'
-import { LinearSRGBColorSpace, NoToneMapping, SRGBColorSpace } from 'three'
+import { NoToneMapping, SRGBColorSpace, ACESFilmicToneMapping } from 'three'
 import RenderDriver from '../three/RenderDriver.vue'
 import SceneHeroDuoContent from './SceneHeroDuoContent.vue'
 import type {
@@ -30,18 +31,23 @@ const emit = defineEmits<{
 }>()
 
 const onState = (s: LoaderState) => emit('state', s)
+const transparent = true
+const toneMapping = computed(() =>
+  props.quality === 'high' ? NoToneMapping : ACESFilmicToneMapping,
+)
+const antialias = computed(() => props.quality !== 'high')
 </script>
 
 <template>
   <TresCanvas
     render-mode="on-demand"
-    :alpha="true"
-    :clear-alpha="0"
+    :alpha="transparent"
+    :clear-alpha="transparent ? 0 : 1"
     clear-color="#000000"
     :dpr="props.dpr || [1, 2]"
-    :antialias="false"
-    :tone-mapping="NoToneMapping"
-    :output-color-space="LinearSRGBColorSpace"
+    :antialias="antialias"
+    :tone-mapping="toneMapping"
+    :output-color-space="SRGBColorSpace"
     :use-legacy-lights="false"
     preset="realistic"
   >

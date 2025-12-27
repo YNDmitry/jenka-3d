@@ -10,6 +10,7 @@
 .scene-wrapper canvas {
   display: block;
   outline: none;
+  touch-action: pan-y !important;
 }
 
 /* Background Proxy for Transitions */

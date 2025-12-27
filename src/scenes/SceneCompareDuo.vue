@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { TresCanvas } from '@tresjs/core'
-import { NoToneMapping, SRGBColorSpace } from 'three'
+import { NoToneMapping, SRGBColorSpace, ACESFilmicToneMapping } from 'three'
 import RenderDriver from '../three/RenderDriver.vue'
 import SceneCompareDuoContent from './SceneCompareDuoContent.vue'
 import type {
@@ -35,6 +36,10 @@ const onState = (s: LoaderState) => emit('state', s)
 const onChangeMode = (m: CompareMode) => emit('change-mode', m)
 
 const transparent = true
+const toneMapping = computed(() =>
+  props.quality === 'high' ? NoToneMapping : ACESFilmicToneMapping,
+)
+const antialias = computed(() => props.quality !== 'high')
 </script>
 
 <template>
@@ -44,8 +49,8 @@ const transparent = true
     :clear-alpha="transparent ? 0 : 1"
     clear-color="#000000"
     :dpr="props.dpr || [1, 2]"
-    :antialias="false"
-    :tone-mapping="NoToneMapping"
+    :antialias="antialias"
+    :tone-mapping="toneMapping"
     :output-color-space="SRGBColorSpace"
     :use-legacy-lights="false"
     preset="realistic"

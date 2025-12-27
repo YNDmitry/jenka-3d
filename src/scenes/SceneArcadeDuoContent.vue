@@ -274,7 +274,10 @@ const stagePos = computed(() => {
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs :multisampling="0">
+    <EffectComposerPmndrs
+      v-if="quality === 'high'"
+      :multisampling="0"
+    >
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
