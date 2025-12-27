@@ -43,7 +43,7 @@ export function getPostFXSettings(params: {
     strength: 0.15,
     threshold: 0.88,
     radius: 0.25,
-    smaa: false,
+    smaa: true,
     vignette: true,
   }
 
@@ -54,7 +54,7 @@ export function getPostFXSettings(params: {
       threshold: base.threshold,
       radius: base.radius,
     },
-    smaa: base.smaa,
+    smaa: base.smaa && (quality === 'high' || quality === 'med'),
     vignette: base.vignette,
   }
 }

@@ -17,7 +17,12 @@ export function useHeroInteraction(
   let targetElement: HTMLElement | null = null
 
   function onMouseMove(e: MouseEvent) {
-    if (!active.value || reducedMotion.value || !targetElement) {
+    if (
+      !active.value ||
+      reducedMotion.value ||
+      !targetElement ||
+      device.value !== 'desktop'
+    ) {
       return
     }
 

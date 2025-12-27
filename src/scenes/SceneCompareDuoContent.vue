@@ -106,6 +106,7 @@ const {
   handleModelClick: _handleModelClick,
 } = useCompareInteraction(
   computed(() => props.active),
+  computed(() => props.device),
   mode,
   groupA,
   groupB,
@@ -139,6 +140,7 @@ const isDragging = computed(() => drag.isDragging.value)
 
 // Hover Effect
 function handleHover(target: 'a' | 'b' | null) {
+  if (props.device !== 'desktop') return
   if (isDragging.value) return // Don't override cursor while dragging
 
   if (!modelA.value || !modelB.value) return
@@ -159,9 +161,7 @@ function handleHover(target: 'a' | 'b' | null) {
 
   if (!ctx) ctx = gsap.context(() => {})
 
-  let gridCfg = CONSTANTS.grid.desktop
-  if (props.device === 'mobile') gridCfg = CONSTANTS.grid.mobile
-  if (props.device === 'tablet') gridCfg = CONSTANTS.grid.tablet
+  const gridCfg = CONSTANTS.grid.desktop
 
   const animate = (obj: any, s: number) =>
     gsap.to(obj.scale, {
@@ -691,15 +691,17 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   <Suspense>
     <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        :intensity="props.bloom * 0.5"
-        :luminance-threshold="1.8"
+        v-if="postfx.bloom.enabled"
+        :intensity="postfx.bloom.strength"
+        :luminance-threshold="postfx.bloom.threshold"
         :luminance-smoothing="0.2"
+        :radius="postfx.bloom.radius"
         mipmap-blur
       />
       <!-- <BrightnessContrastPmndrs :contrast="0.01" :brightness="0.0" /> -->
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <!-- <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" /> -->
-      <SMAA />
+      <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>
 </template>

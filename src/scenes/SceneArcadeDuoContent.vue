@@ -274,15 +274,17 @@ const stagePos = computed(() => {
   <Suspense>
     <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        :intensity="props.bloom * 0.5"
-        :luminance-threshold="1.8"
+        v-if="postfx.bloom.enabled"
+        :intensity="postfx.bloom.strength"
+        :luminance-threshold="postfx.bloom.threshold"
         :luminance-smoothing="0.2"
+        :radius="postfx.bloom.radius"
         mipmap-blur
       />
       <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
-      <SMAA />
+      <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>
 </template>

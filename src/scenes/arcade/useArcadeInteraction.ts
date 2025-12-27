@@ -181,6 +181,7 @@ export function useArcadeInteraction(
   }
 
   function handleHover(model: 'A' | 'B', over: boolean) {
+    if (device.value !== 'desktop') return
     const isBack = (model === 'A' && isSwapped.value) || (model === 'B' && !isSwapped.value)
     // console.log('Hover:', model, over, 'isBack:', isBack)
     if (over) {
@@ -222,7 +223,12 @@ export function useArcadeInteraction(
   }
 
   function onMouseMove(e: MouseEvent) {
-    if (!active.value || reducedMotion.value) return
+    if (
+      !active.value ||
+      reducedMotion.value ||
+      device.value !== 'desktop'
+    )
+      return
     const x = (e.clientX / window.innerWidth) * 2 - 1
     const y = -(e.clientY / window.innerHeight) * 2 + 1
     mouseX.value = x

@@ -60,8 +60,8 @@ export function guessQualityTier(): QualityTier {
   const cores = navigator.hardwareConcurrency ?? 4
 
   // iOS devices generally have excellent GPUs (Metal/Apple Silicon).
-  // Default to 'high' to ensure premium materials (Clearcoat) and textures.
-  if (isIOS) { return 'high' }
+  // However, WebGL memory limits are strict. Default to 'med' to ensure stability.
+  if (isIOS) { return 'med' }
 
   // Upgrade Android to 'high' as well, relying on memory check to downgrade weak ones.
   if (isMobileUA) {

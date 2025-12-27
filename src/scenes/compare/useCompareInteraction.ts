@@ -2,10 +2,11 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch, type Ref } from
 import { type Object3D, Vector2, Vector3 } from 'three'
 import gsap from 'gsap'
 import { useDragRotate } from '../../three/controls'
-import type { CompareMode } from '../../shared/types'
+import type { CompareMode, DeviceClass } from '../../shared/types'
 
 export function useCompareInteraction(
   active: Ref<boolean>,
+  device: Ref<DeviceClass>,
   mode: Ref<CompareMode>,
   groupA: Ref<Object3D | null>,
   groupB: Ref<Object3D | null>,
@@ -73,18 +74,21 @@ export function useCompareInteraction(
   const CLICK_THRESHOLD = 20
 
   function handlePointerDown(e: any) {
-    // Prevent text selection/default behavior which might override cursor
-    if (e.preventDefault) {
-      e.preventDefault()
-    }
-    if (e.stopPropagation) {
-      e.stopPropagation()
-    }
-
     const native = e.nativeEvent || e
     startPos.set(native.clientX, native.clientY)
 
-    if (mode.value !== 'grid' && drag.onPointerDown) {
+    if (
+      mode.value !== 'grid' &&
+      drag.onPointerDown
+    ) {
+      // Prevent text selection/default behavior which might override cursor
+      if (e.preventDefault) {
+        e.preventDefault()
+      }
+      if (e.stopPropagation) {
+        e.stopPropagation()
+      }
+
       drag.onPointerDown(native)
       // Force cursor immediately with priority
       document.body.style.setProperty('cursor', 'grabbing', 'important')

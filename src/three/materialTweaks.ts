@@ -189,12 +189,12 @@ export function optimizeModel(
       setTextureAnisotropy(material.normalMap, r, quality)
 
       // Upload to GPU now, not later
-      uploadTexture(material.map, r)
-      uploadTexture(material.emissiveMap, r)
-      uploadTexture(material.normalMap, r)
-      uploadTexture(material.roughnessMap, r)
-      uploadTexture(material.metalnessMap, r)
-      uploadTexture(material.aoMap, r)
+      // uploadTexture(material.map, r)
+      // uploadTexture(material.emissiveMap, r)
+      // uploadTexture(material.normalMap, r)
+      // uploadTexture(material.roughnessMap, r)
+      // uploadTexture(material.metalnessMap, r)
+      // uploadTexture(material.aoMap, r)
 
       // 3. Emissive Boost
       if (

@@ -46,7 +46,7 @@ jobs:
           body: ${{ steps.tag_version.outputs.changelog }}
           files: |
             dist/lib/jenka-3d.js
-            dist/lib/style.css
+            dist/lib/jenka-3d.css
           token: ${{ secrets.GITHUB_TOKEN }}
 
       # 4. Update Rolling Branch (for @release CDN links)
@@ -57,3 +57,9 @@ jobs:
           publish_dir: ./dist/lib
           publish_branch: release
           force_orphan: true
+
+      # 5. Purge jsDelivr Cache
+      - name: Purge jsDelivr Cache
+        run: |
+          curl https://purge.jsdelivr.net/gh/yndmitry/jenka-3d@release/jenka-3d.js
+          curl https://purge.jsdelivr.net/gh/yndmitry/jenka-3d@release/jenka-3d.css

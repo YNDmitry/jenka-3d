@@ -280,9 +280,11 @@ const modelConfigB = computed(
   <Suspense>
     <EffectComposerPmndrs :multisampling="0">
       <BloomPmndrs
-        :intensity="props.bloom"
-        :luminance-threshold="1.1"
+        v-if="postfx.bloom.enabled"
+        :intensity="postfx.bloom.strength"
+        :luminance-threshold="postfx.bloom.threshold"
         :luminance-smoothing="0.3"
+        :radius="postfx.bloom.radius"
         mipmap-blur
       />
       <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
@@ -291,7 +293,7 @@ const modelConfigB = computed(
         :exposure="props.exposure"
       />
       <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
-      <SMAA v-if="quality === 'high'" />
+      <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>
 </template>
