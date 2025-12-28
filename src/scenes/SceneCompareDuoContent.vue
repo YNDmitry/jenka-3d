@@ -736,7 +736,8 @@ onBeforeRender(({ elapsed, delta }) => {
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs v-if="quality === 'high' && state === 'ready' && rendererReady" :multisampling="0">
+    <!-- CRITICAL CRASH FIX: Disable Post-Processing on ALL mobile devices -->
+    <EffectComposerPmndrs v-if="quality === 'high' && device === 'desktop' && state === 'ready' && rendererReady" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
