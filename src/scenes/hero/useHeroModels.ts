@@ -150,7 +150,7 @@ export function useHeroModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
         loadGLTFWithTweaks({
           url: config.modelB,
@@ -159,7 +159,7 @@ export function useHeroModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
       ])
 

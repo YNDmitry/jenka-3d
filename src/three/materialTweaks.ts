@@ -414,15 +414,19 @@ export function diagnoseMaterials(root: Object3D): void {
   }
 }
 
-function createDracoLoader(manager: LoadingManager): DRACOLoader {
-  const draco = new DRACOLoader(manager)
-  // Reverting to CDN for Webflow compatibility where local /draco/ is not available
-  draco.setDecoderPath(
-    'https://www.gstatic.com/draco/versioned/decoders/1.5.7/',
-  )
-  draco.setDecoderConfig({ type: 'js' })
-  draco.preload()
-  return draco
+// Singleton Draco Loader
+let sharedDracoLoader: DRACOLoader | null = null
+
+function getDracoLoader(): DRACOLoader {
+  if (!sharedDracoLoader) {
+    sharedDracoLoader = new DRACOLoader()
+    sharedDracoLoader.setDecoderPath(
+      'https://www.gstatic.com/draco/versioned/decoders/1.5.7/',
+    )
+    sharedDracoLoader.setDecoderConfig({ type: 'js' })
+    sharedDracoLoader.preload()
+  }
+  return sharedDracoLoader
 }
 
 export interface LoadGLTFOptions extends Partial<MaterialTweaksOptions> {
@@ -462,7 +466,8 @@ export async function loadGLTFWithTweaks(
 
   if (draco) {
     try {
-      loader.setDRACOLoader(createDracoLoader(manager))
+      // Use shared loader
+      loader.setDRACOLoader(getDracoLoader())
     } catch (err) {
       warnOnce(
         'draco-loader-failed',

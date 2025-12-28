@@ -32,7 +32,7 @@ import { useCompareInteraction } from './compare/useCompareInteraction'
 import { useCompareModels } from './compare/useCompareModels'
 import { useInteractiveHotspots } from './compare/useInteractiveHotspots'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
-import { unwrapRenderer, useShadowBaking, precompileScene } from '../three/utils'
+import { useShadowBaking, precompileScene, unwrapRenderer } from '../three/utils'
 
 const props = defineProps<{
   container?: HTMLElement
@@ -58,7 +58,17 @@ const emit = defineEmits<{
 const { emitFromCanvas } = useWebflowIntegration(props.container)
 
 const { renderer, invalidate, camera } = useTres()
-const { onBeforeRender, start, stop } = useLoop()
+const rendererReady = ref(false)
+
+watch(
+  () => unwrapRenderer(renderer),
+  (r) => {
+    if (r) rendererReady.value = true
+  },
+  { immediate: true },
+)
+
+const { onBeforeRender } = useLoop()
 
 // --- 1. Models & State ---
 const groupA = shallowRef<any>(null)
@@ -78,7 +88,7 @@ const {
   interactablesB,
   emissiveA,
   emissiveB,
-} = useCompareModels(props.config, props.quality, unwrapRenderer(renderer))
+} = useCompareModels(props.config, props.quality, renderer)
 
 // OPTIMIZATION: Bake shadows once (Professional performance)
 useShadowBaking(renderer, state, invalidate)
@@ -382,26 +392,11 @@ const createHotspotMeshes = (items: any[]) =>
 const hotspotMeshesA = computed(() => createHotspotMeshes(interactablesA.value))
 const hotspotMeshesB = computed(() => createHotspotMeshes(interactablesB.value))
 
-watch(
-  () => props.active,
-  (v) => (v ? start() : stop()),
-  { immediate: true },
-)
 watch(state, (s) => emit('state', s))
 
 watch(
-  () => [props.config.modelA, props.config.modelB, props.quality, props.device],
+  () => [props.config.modelA, props.config.modelB, props.quality],
   async () => {
-    // Clean up previous glints (including their textures) to prevent memory leaks
-    if (glintsA) {
-      glintsA.dispose()
-      glintsA = null
-    }
-    if (glintsB) {
-      glintsB.dispose()
-      glintsB = null
-    }
-
     await loadModels({
       emissive: props.emissive,
       envIntensity: props.envIntensity,
@@ -417,11 +412,29 @@ watch(
         await precompileScene(r, toRaw(modelB.value), camera.value)
       }
     }
+  },
+  { immediate: true, deep: true },
+)
+
+// Handle Glints & Layout when models (state) OR device changes
+watch(
+  () => [state.value, props.device, props.quality],
+  () => {
+    if (state.value !== 'ready') return
+
+    // Clean up previous glints
+    if (glintsA) {
+      glintsA.dispose()
+      glintsA = null
+    }
+    if (glintsB) {
+      glintsB.dispose()
+      glintsB = null
+    }
 
     const isDesktop = props.device === 'desktop'
 
     const targetsA = [...buttonsA.value]
-    // Glints enabled
     glintsA =
       isDesktop && targetsA.length > 0
         ? createAttachedGlints({
@@ -446,8 +459,11 @@ watch(
     glintsB?.setEnabled?.(mode.value === 'focus-b')
 
     applyGridLayout()
+    if (mode.value !== 'grid') {
+      applyMode(mode.value, false)
+    }
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 
 watch(mode, (newMode) => {
@@ -474,17 +490,10 @@ watch(
 
 // --- Render Loop ---
 
-watch(
-  () => props.device,
-  () => {
-    applyGridLayout()
-    if (state.value === 'ready') applyMode(mode.value, false)
-  },
-)
-
 // --- Render Loop ---
 onBeforeRender(({ elapsed, delta }) => {
   if (!props.active || state.value !== 'ready') return
+  if (typeof elapsed !== 'number' || isNaN(elapsed)) return
 
   // Параллакс в Grid режиме
   if (stageRef.value) {
@@ -509,8 +518,12 @@ onBeforeRender(({ elapsed, delta }) => {
     }
   }
 
-  glintsA?.update(elapsed)
-  glintsB?.update(elapsed + 0.5)
+  try {
+    glintsA?.update(elapsed)
+    glintsB?.update(elapsed + 0.5)
+  } catch (e) {
+    // Suppress update errors to keep scene alive
+  }
 })
 
 const stageRef = shallowRef<any>(null)
@@ -543,7 +556,6 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
     :position="lightConfig.key.pos"
     :intensity="lightConfig.key.intensity"
     :cast-shadow="quality === 'high'"
-    :shadow-map-size="[2048, 2048]"
     :shadow-bias="-0.0001"
   />
 
@@ -704,8 +716,8 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
     </TresGroup>
   </TresGroup>
 
-  <Suspense>
-    <EffectComposerPmndrs v-if="quality === 'high' && state === 'ready'" :multisampling="0">
+  <!-- <Suspense>
+    <EffectComposerPmndrs v-if="quality === 'high' && state === 'ready' && rendererReady" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
@@ -717,5 +729,5 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
-  </Suspense>
+  </Suspense> -->
 </template>

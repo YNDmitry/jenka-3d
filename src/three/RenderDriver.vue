@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useTres } from '@tresjs/core'
 import type { QualityTier } from '../shared/types'
 import { getTargetFpsForQuality } from './postfx'
+import { unwrapRenderer } from './utils'
 
 const props = defineProps<{
   active: boolean
@@ -28,48 +29,55 @@ const idleFpsLimit = computed(() => {
 let rafId: number | null = null
 let boostUntil = 0
 let sleepAt = 0
-let lastFrameTime = 0
+let lastFrameTime = performance.now()
 
 // The Loop
 function loop(now: number) {
-  if (!props.active) {
-    rafId = requestAnimationFrame(loop)
-    return
-  }
+  try {
+    const r = unwrapRenderer(renderer)
+    if (!props.active || !r) {
+      rafId = requestAnimationFrame(loop)
+      return
+    }
 
-  // 1. BOOST MODE: Unlock FPS
-  if (now < boostUntil) {
-    const boostFps = getTargetFpsForQuality(props.quality)
-    const interval = 1000 / boostFps
+    // 1. BOOST MODE: Unlock FPS
+    if (now < boostUntil) {
+      const boostFps = getTargetFpsForQuality(props.quality)
+      const interval = 1000 / boostFps
+      const delta = now - lastFrameTime
+
+      if (delta > interval) {
+        invalidate()
+        lastFrameTime = now - (delta % interval)
+      }
+      
+      rafId = requestAnimationFrame(loop)
+      return
+    }
+
+    // 2. IDLE/SLEEP MODE
+    // If we've passed the sleep timer, stop rendering entirely (0 FPS)
+    if (now > sleepAt) {
+      rafId = requestAnimationFrame(loop)
+      return
+    }
+
+    // Otherwise, run at BASE_FPS (Cinematic Idle) to keep glints/floating alive
+    const targetFps = idleFpsLimit.value
+    const interval = 1000 / targetFps
     const delta = now - lastFrameTime
 
     if (delta > interval) {
       invalidate()
       lastFrameTime = now - (delta % interval)
     }
-    
+
     rafId = requestAnimationFrame(loop)
-    return
+  } catch (err) {
+    console.error('RenderDriver Loop Error:', err)
+    if (rafId !== null) cancelAnimationFrame(rafId)
+    rafId = null
   }
-
-  // 2. IDLE/SLEEP MODE
-  // If we've passed the sleep timer, stop rendering entirely (0 FPS)
-  if (now > sleepAt) {
-    rafId = requestAnimationFrame(loop)
-    return
-  }
-
-  // Otherwise, run at BASE_FPS (Cinematic Idle) to keep glints/floating alive
-  const targetFps = idleFpsLimit.value
-  const interval = 1000 / targetFps
-  const delta = now - lastFrameTime
-
-  if (delta > interval) {
-    invalidate()
-    lastFrameTime = now - (delta % interval)
-  }
-
-  rafId = requestAnimationFrame(loop)
 }
 
 function boost() {
@@ -91,6 +99,19 @@ function onVisibilityChange() {
   }
 }
 
+function onContextLost(event: Event) {
+  event.preventDefault()
+  console.warn('[RenderDriver] WebGL Context Lost')
+  if (rafId !== null) cancelAnimationFrame(rafId)
+  rafId = null
+}
+
+function onContextRestored() {
+  console.log('[RenderDriver] WebGL Context Restored')
+  boost()
+  rafId = requestAnimationFrame(loop)
+}
+
 onMounted(() => {
   // Start Loop
   rafId = requestAnimationFrame(loop)
@@ -103,10 +124,11 @@ onMounted(() => {
   document.addEventListener('visibilitychange', onVisibilityChange, opts)
   
   // Element level interactions
-  // Element level interactions
   const r = (renderer as any).value || renderer
   const el = (r as any)?.domElement as HTMLElement | undefined
   if (el) {
+    el.addEventListener('webglcontextlost', onContextLost, opts)
+    el.addEventListener('webglcontextrestored', onContextRestored, opts)
     el.addEventListener('pointermove', boost, opts)
     el.addEventListener('pointerdown', boost, opts)
     el.addEventListener('wheel', boost, opts)
@@ -127,6 +149,8 @@ onUnmounted(() => {
   const r = (renderer as any).value || renderer
   const el = (r as any)?.domElement as HTMLElement | undefined
   if (el) {
+    el.removeEventListener('webglcontextlost', onContextLost, opts)
+    el.removeEventListener('webglcontextrestored', onContextRestored, opts)
     el.removeEventListener('pointermove', boost, opts)
     el.removeEventListener('pointerdown', boost, opts)
     el.removeEventListener('wheel', boost, opts)

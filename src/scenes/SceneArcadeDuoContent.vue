@@ -21,7 +21,7 @@ import type {
   WebflowSceneConfig,
 } from '../shared/types'
 import { getPostFXSettings } from '../three/postfx'
-import { unwrapRenderer, useShadowBaking } from '../three/utils'
+import { useShadowBaking } from '../three/utils'
 import { createAttachedGlints } from '../three/glow'
 
 import { CONSTANTS } from './arcade/config'
@@ -76,7 +76,7 @@ const {
 } = useArcadeModels(
   props.config,
   props.quality,
-  unwrapRenderer(renderer),
+  renderer,
   computed(() => props.device),
 )
 
@@ -93,7 +93,7 @@ watch(cameraRef, (cam) => {
 })
 
 watch(
-  () => [props.config.modelA, props.config.modelB, props.quality, props.device],
+  () => [props.config.modelA, props.config.modelB, props.quality],
   () => {
     loadModels({
       emissive: props.emissive,
@@ -140,9 +140,12 @@ onUnmounted(() => {
 
 onBeforeRender(({ elapsed }) => {
   if (!props.active) return
+  if (typeof elapsed !== 'number' || isNaN(elapsed)) return
 
-  glintsA?.update(elapsed)
-  glintsB?.update(elapsed + 0.5) // Offset phase
+  try {
+    glintsA?.update(elapsed)
+    glintsB?.update(elapsed + 0.5) // Offset phase
+  } catch (e) {}
 })
 
 // Semaphore
@@ -235,7 +238,6 @@ const stagePos = computed(() => {
     :position="lightConfig.key.pos"
     :intensity="lightConfig.key.intensity"
     :cast-shadow="quality === 'high'"
-    :shadow-map-size="[2048, 2048]"
     :shadow-bias="-0.0001"
   />
 

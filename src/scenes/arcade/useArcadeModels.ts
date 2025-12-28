@@ -1,4 +1,4 @@
-import { ref, shallowRef, type Ref } from 'vue'
+import { ref, shallowRef, markRaw, type Ref } from 'vue'
 import { type Material, type Mesh, MeshStandardMaterial, type Object3D } from 'three'
 import type { LoaderState, QualityTier, DeviceClass, WebflowSceneConfig } from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
@@ -134,7 +134,7 @@ export function useArcadeModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
         loadGLTFWithTweaks({
           url: config.modelB,
@@ -143,7 +143,7 @@ export function useArcadeModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
       ])
 
@@ -258,8 +258,8 @@ export function useArcadeModels(
         }
       })
 
-      modelA.value = sceneA
-      modelB.value = sceneB
+      modelA.value = markRaw(sceneA)
+      modelB.value = markRaw(sceneB)
 
       buttonsA.value = collectRandomGlintTargets(sceneA)
       buttonsB.value = collectRandomGlintTargets(sceneB)

@@ -24,7 +24,7 @@ import { CONSTANTS } from './hero/config'
 import { useHeroModels } from './hero/useHeroModels'
 import { useHeroInteraction } from './hero/useHeroInteraction'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
-import { useShadowBaking, unwrapRenderer } from '../three/utils'
+import { useShadowBaking } from '../three/utils'
 import { createAttachedGlints } from '../three/glow'
 import { getPostFXSettings } from '../three/postfx'
 
@@ -94,7 +94,7 @@ const {
 } = useHeroModels(
   props.config,
   props.quality,
-  unwrapRenderer(renderer),
+  renderer,
   computed(() => props.device),
 )
 
@@ -111,7 +111,7 @@ watch(cameraRef, (cam) => {
 })
 
 watch(
-  () => [props.config.modelA, props.config.modelB, props.quality, props.device],
+  () => [props.config.modelA, props.config.modelB, props.quality],
   () => {
     loadModels({
       emissive: props.emissive,
@@ -167,9 +167,12 @@ onUnmounted(() => {
 // --- Render Loop ---
 onBeforeRender(({ elapsed }) => {
   if (!props.active) return
+  if (typeof elapsed !== 'number' || isNaN(elapsed)) return
 
-  glintsA?.update(elapsed)
-  glintsB?.update(elapsed + 0.5) // Offset phase
+  try {
+    glintsA?.update(elapsed)
+    glintsB?.update(elapsed + 0.5) // Offset phase
+  } catch (e) {}
 })
 
 // --- Interaction (Parallax) ---
@@ -237,7 +240,6 @@ const modelConfigB = computed(
     :position="[3.5, 5.5, 6.5]"
     :intensity="1.0"
     :cast-shadow="shadowConfig.cast"
-    :shadow-map-size="[shadowConfig.size, shadowConfig.size]"
   />
 
   <!-- Fill Light: Softens shadows -->

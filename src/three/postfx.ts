@@ -52,7 +52,7 @@ export function getPostFXSettings(params: {
 
   return {
     bloom: {
-      enabled: quality === 'high' && bloomMultiplier > 0,
+      enabled: quality === 'high' && bloomMultiplier > 0 && !isMobile,
       strength: base.strength * bloomMultiplier * focusBoost,
       threshold: base.threshold,
       radius: base.radius,

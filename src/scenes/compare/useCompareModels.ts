@@ -78,7 +78,7 @@ export function useCompareModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
         loadGLTFWithTweaks({
           url: config.modelB,
@@ -87,7 +87,7 @@ export function useCompareModels(
           quality,
           emissiveIntensity: props.emissive,
           envMapIntensity: props.envIntensity,
-          renderer: renderer.value,
+          renderer,
         }),
       ])
 
