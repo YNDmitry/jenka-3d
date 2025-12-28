@@ -708,9 +708,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         :radius="postfx.bloom.radius"
         mipmap-blur
       />
-      <!-- <BrightnessContrastPmndrs :contrast="0.01" :brightness="0.0" /> -->
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
-      <!-- <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" /> -->
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>

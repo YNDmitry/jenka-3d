@@ -16,6 +16,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { QualityTier } from '../shared/types'
 import { clamp, warnOnce } from '../shared/utils'
 import { unwrapRenderer } from './utils'
+import { isCoarsePointer } from '../shared/utils'
 
 export interface MaterialTweaksOptions {
   debug: boolean
@@ -177,6 +178,17 @@ export function optimizeModel(
     quality,
   } = options
 
+  let maxDim = 4096
+
+  // FIX: Жесткий лимит 2048px для любых мобильных устройств
+  if (isCoarsePointer()) {
+    maxDim = 2048
+  } else if (options.quality === 'low') {
+    maxDim = 1024
+  } else if (options.quality === 'med') {
+    maxDim = 2048
+  }
+
   const r = unwrapRenderer(renderer)
   const resizedTextures = new Map<Texture, Texture>()
 
@@ -263,14 +275,6 @@ export function optimizeModel(
       // 2. Filter Quality & GPU Upload
       setTextureAnisotropy(material.map, r, quality)
       setTextureAnisotropy(material.normalMap, r, quality)
-
-      // Upload to GPU now, not later
-      // uploadTexture(material.map, r)
-      // uploadTexture(material.emissiveMap, r)
-      // uploadTexture(material.normalMap, r)
-      // uploadTexture(material.roughnessMap, r)
-      // uploadTexture(material.metalnessMap, r)
-      // uploadTexture(material.aoMap, r)
 
       // 3. Emissive Boost
       if (

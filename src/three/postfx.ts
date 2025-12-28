@@ -1,4 +1,5 @@
 import type { QualityTier } from '../shared/types'
+import { isCoarsePointer } from '../shared/utils'
 
 export interface BloomSettings {
   enabled: boolean
@@ -46,7 +47,9 @@ export function getPostFXSettings(params: {
     smaa: true,
     vignette: true,
   }
-
+  
+  const isMobile = isCoarsePointer()
+  
   return {
     bloom: {
       enabled: quality === 'high' && bloomMultiplier > 0,
@@ -54,7 +57,7 @@ export function getPostFXSettings(params: {
       threshold: base.threshold,
       radius: base.radius,
     },
-    smaa: base.smaa && (quality === 'high' || quality === 'med'),
+    smaa: props.quality === 'high' && !params.reducedMotion && !isMobile
     vignette: base.vignette,
   }
 }

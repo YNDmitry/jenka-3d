@@ -95,6 +95,20 @@ bun run build:lib
 
 ---
 
+## 📱 Mobile & iOS Constraints
+
+Jenka 3D implements specific safeguards for iOS Safari to prevent WebGL memory crashes ("Jetsam" events).
+
+### The "Retina OOM" Issue
+On iPhone Pro models (DPR 3.0), a fullscreen WebGL buffer with Post-Processing can exceed Safari's strict per-tab memory limit (~350MB). This is exacerbated when loading two models simultaneously (Compare Scene).
+
+### Implemented Safeguards
+1.  **SMAA Disabled on Mobile:** Subpixel Morphological Antialiasing is forcefully disabled on touch devices regardless of the `data-quality` setting. The high pixel density of mobile screens makes SMAA redundant and computationally expensive.
+2.  **Texture Clamping:** Textures are automatically resized to a maximum of **2048px** on mobile devices during the loading phase (`src/three/materialTweaks.ts`).
+3.  **DPR Clamping:** The renderer clamps Device Pixel Ratio to a maximum of **2.0**, preventing internal render buffers from exploding on 3x screens.
+
+**Developer Note:** If adding new post-processing effects, always check `isCoarsePointer()` in `postfx.ts` and disable heavy passes for mobile.
+
 ## 🧠 "Ultrathink" Notes
 
 *   **Zero-Desync Layouts:** We use a `<primitive>` container strategy for interactive elements. Hotspots are injected as children of the GLTF wrapper, inheriting all GSAP transform matrices automatically.
