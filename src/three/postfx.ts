@@ -47,9 +47,9 @@ export function getPostFXSettings(params: {
     smaa: true,
     vignette: true,
   }
-  
+
   const isMobile = isCoarsePointer()
-  
+
   return {
     bloom: {
       enabled: quality === 'high' && bloomMultiplier > 0,
@@ -57,7 +57,7 @@ export function getPostFXSettings(params: {
       threshold: base.threshold,
       radius: base.radius,
     },
-    smaa: props.quality === 'high' && !params.reducedMotion && !isMobile
+    smaa: props.quality === 'high' && !params.reducedMotion && !isMobile,
     vignette: base.vignette,
   }
 }
