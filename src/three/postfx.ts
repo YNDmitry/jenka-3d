@@ -57,7 +57,7 @@ export function getPostFXSettings(params: {
       threshold: base.threshold,
       radius: base.radius,
     },
-    smaa: props.quality === 'high' && !params.reducedMotion && !isMobile,
+    smaa: quality === 'high' && !params.reducedMotion && !isMobile,
     vignette: base.vignette,
   }
 }
