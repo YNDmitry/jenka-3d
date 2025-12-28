@@ -180,7 +180,7 @@ export function optimizeModel(
 
   let maxDim = 4096
 
-  // FIX: Жесткий лимит 2048px для любых мобильных устройств
+  // FIX: Hard limit 2048px for any mobile device
   if (isCoarsePointer()) {
     maxDim = 2048
   } else if (options.quality === 'low') {
@@ -190,14 +190,39 @@ export function optimizeModel(
   }
 
   const r = unwrapRenderer(renderer)
+  
+  // Cache to prevent infinite loops and redundant processing
+  const processedTextures = new Set<string>()
   const resizedTextures = new Map<Texture, Texture>()
 
-  const getResized = (tex: Texture | null): Texture | null => {
+  const optimizeTexture = (tex: Texture | null): Texture | null => {
     if (!tex) { return null }
-    if (resizedTextures.has(tex)) { return resizedTextures.get(tex)! }
-    const newTex = resizeTexture(tex, 1024)
-    resizedTextures.set(tex, newTex)
-    return newTex
+    if (processedTextures.has(tex.uuid)) { 
+      // If we already processed this specific instance (or its replacement), return it if mapped
+      return resizedTextures.get(tex) || tex 
+    }
+    processedTextures.add(tex.uuid)
+
+    // Check size
+    const image = tex.image as any
+    if (image && (image.width > maxDim || image.height > maxDim)) {
+       // Resize
+       const newTex = resizeTexture(tex, maxDim)
+       
+       // Memory Opt: Disable mipmaps for large textures on mobile to save memory
+       if (isCoarsePointer()) {
+          newTex.generateMipmaps = false
+       }
+       
+       resizedTextures.set(tex, newTex)
+       return newTex
+    }
+    
+    // Even if not resized, we might want to disable mipmaps if it's right at the limit?
+    // User instruction: "if texture.image.width > maxTextureSize ... texture.generateMipmaps = false"
+    // Our resizeTexture function returns a NEW texture. 
+    
+    return tex
   }
 
   root.traverse((obj) => {
@@ -222,7 +247,6 @@ export function optimizeModel(
       const glassish = isLikelyGlassMaterial(name)
 
       // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
-      // Adds Clearcoat for "Car Paint" look on body parts
       if (
         quality === 'high' &&
         !screenish &&
@@ -235,11 +259,9 @@ export function optimizeModel(
         const physical = new MeshPhysicalMaterial()
         MeshStandardMaterial.prototype.copy.call(physical, standard)
         
-        // Clearcoat settings for premium look
         physical.clearcoat = 1.0
         physical.clearcoatRoughness = 0.1
         
-        // Replace
         mat = physical
         materials[i] = physical
         
@@ -252,15 +274,14 @@ export function optimizeModel(
 
       const material: any = mat
 
-      // 0. Texture Downscaling (Mobile Memory Opt)
-      if (quality === 'med' || quality === 'low') {
-        if (material.map) { material.map = getResized(material.map) }
-        if (material.emissiveMap) { material.emissiveMap = getResized(material.emissiveMap) }
-        if (material.normalMap) { material.normalMap = getResized(material.normalMap) }
-        if (material.roughnessMap) { material.roughnessMap = getResized(material.roughnessMap) }
-        if (material.metalnessMap) { material.metalnessMap = getResized(material.metalnessMap) }
-        if (material.aoMap) { material.aoMap = getResized(material.aoMap) }
-      }
+      // 0. Texture Optimization (Resize & Loop Protection)
+      if (material.map) { material.map = optimizeTexture(material.map) }
+      if (material.emissiveMap) { material.emissiveMap = optimizeTexture(material.emissiveMap) }
+      if (material.normalMap) { material.normalMap = optimizeTexture(material.normalMap) }
+      if (material.roughnessMap) { material.roughnessMap = optimizeTexture(material.roughnessMap) }
+      if (material.metalnessMap) { material.metalnessMap = optimizeTexture(material.metalnessMap) }
+      if (material.aoMap) { material.aoMap = optimizeTexture(material.aoMap) }
+      if (material.alphaMap) { material.alphaMap = optimizeTexture(material.alphaMap) }
 
       // 1. Color Space
       setTextureColorSpace(material.map, SRGBColorSpace)

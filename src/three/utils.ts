@@ -1,5 +1,5 @@
 import { watch, type Ref } from 'vue'
-import type { WebGLRenderer } from 'three'
+import type { WebGLRenderer, Scene, Camera, Object3D } from 'three'
 import type { LoaderState } from '../shared/types'
 
 /**
@@ -37,4 +37,17 @@ export function useShadowBaking(
     },
     { immediate: true }
   )
+}
+
+export async function precompileScene(
+  renderer: WebGLRenderer, 
+  scene: Scene | Object3D, 
+  camera: Camera
+) {
+  // Safari fix: compileAsync prevents UI thread blocking
+  if (renderer.compileAsync) {
+    await renderer.compileAsync(scene, camera, scene as Scene)
+  } else {
+    renderer.compile(scene, camera)
+  }
 }

@@ -99,6 +99,28 @@ bun run build:lib
 
 Jenka 3D implements specific safeguards for iOS Safari to prevent WebGL memory crashes ("Jetsam" events).
 
+### 🚨 iOS Safari Stability (Critical)
+
+The `SceneCompare` module implements strict stability measures to prevent "Jetsam" (System Kill) and UI Freezes on iOS.
+
+### 1. Reactivity Freeze Prevention
+**Problem:** Modifying Three.js objects (textures/geometry) inside a reactive Vue `watch` can trigger an infinite update loop if the object is wrapped in a Vue Proxy.
+**Solution:**
+- Always use `shallowRef` for GLTF models.
+- Always wrap model access in `toRaw()` before passing to `optimizeModel()` (or `precompileScene`).
+- Use a `Set<uuid>` inside traversal functions to prevent processing the same texture twice.
+
+### 2. Async Shader Compilation
+**Problem:** Safari freezes the main thread for 3-10 seconds when compiling shaders for two heavy models simultaneously.
+**Solution:**
+- We rely on `renderer.compileAsync()` whenever possible.
+- Post-processing (SMAA) is disabled on iOS (`src/three/postfx.ts`) to reduce shader complexity.
+
+### 3. Memory Caps
+- **Max Texture Size:** 2048px on mobile (clamped in `materialTweaks.ts`).
+- **DPR Limit:** Max 2.0 on Retina screens (3.0 causes immediate crash).
+- **Mipmaps:** Disabled for large textures on mobile.
+
 ### The "Retina OOM" Issue
 On iPhone Pro models (DPR 3.0), a fullscreen WebGL buffer with Post-Processing can exceed Safari's strict per-tab memory limit (~350MB). This is exacerbated when loading two models simultaneously (Compare Scene).
 

@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch, toRaw } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import gsap from 'gsap'
 import { MeshBasicMaterial, Mesh, SphereGeometry, DoubleSide } from 'three'
 
 import {
   BloomPmndrs,
-  BrightnessContrastPmndrs,
   EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
   ToneMappingPmndrs,
-  VignettePmndrs,
 } from '@tresjs/post-processing'
 import { ToneMappingMode } from 'postprocessing'
 import { Environment, Html } from '@tresjs/cientos'
@@ -34,7 +32,7 @@ import { useCompareInteraction } from './compare/useCompareInteraction'
 import { useCompareModels } from './compare/useCompareModels'
 import { useInteractiveHotspots } from './compare/useInteractiveHotspots'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
-import { unwrapRenderer, useShadowBaking } from '../three/utils'
+import { unwrapRenderer, useShadowBaking, precompileScene } from '../three/utils'
 
 const props = defineProps<{
   container?: HTMLElement
@@ -59,7 +57,7 @@ const emit = defineEmits<{
 
 const { emitFromCanvas } = useWebflowIntegration(props.container)
 
-const { renderer, invalidate } = useTres()
+const { renderer, invalidate, camera } = useTres()
 const { onBeforeRender, start, stop } = useLoop()
 
 // --- 1. Models & State ---
@@ -409,6 +407,17 @@ watch(
       envIntensity: props.envIntensity,
     })
 
+    // Safari Fix: Compile shaders async to prevent main thread freeze
+    const r = unwrapRenderer(renderer)
+    if (r && camera.value) {
+      if (modelA.value) {
+        await precompileScene(r, toRaw(modelA.value), camera.value)
+      }
+      if (modelB.value) {
+        await precompileScene(r, toRaw(modelB.value), camera.value)
+      }
+    }
+
     const isDesktop = props.device === 'desktop'
 
     const targetsA = [...buttonsA.value]
@@ -696,10 +705,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs
-      v-if="quality === 'high'"
-      :multisampling="0"
-    >
+    <EffectComposerPmndrs v-if="quality === 'high'" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
