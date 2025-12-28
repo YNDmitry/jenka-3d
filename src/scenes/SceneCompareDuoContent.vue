@@ -705,7 +705,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs v-if="quality === 'high'" :multisampling="0">
+    <EffectComposerPmndrs v-if="quality === 'high' && state === 'ready'" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"

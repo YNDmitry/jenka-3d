@@ -165,11 +165,12 @@ function resizeTexture(tex: Texture, maxDim: number): Texture {
 
 /**
  * Applies material tweaks AND uploads textures to GPU immediately.
+ * Async to prevent main thread blocking on large models.
  */
-export function optimizeModel(
+export async function optimizeModel(
   root: Object3D,
   options: MaterialTweaksOptions,
-): void {
+): Promise<void> {
   const {
     emissiveIntensity,
     envMapIntensity,
@@ -218,123 +219,130 @@ export function optimizeModel(
        return newTex
     }
     
-    // Even if not resized, we might want to disable mipmaps if it's right at the limit?
-    // User instruction: "if texture.image.width > maxTextureSize ... texture.generateMipmaps = false"
-    // Our resizeTexture function returns a NEW texture. 
-    
     return tex
   }
 
+  // First, collect all meshes to avoid synchronous traversal lock
+  const meshes: Mesh[] = []
   root.traverse((obj) => {
-    const anyObj = obj as any
-    if (!anyObj?.isMesh) {
-      return
-    }
-
-    const mesh = obj as Mesh
-    const materials: Material[] = Array.isArray(mesh.material)
-      ? mesh.material
-      : [mesh.material]
-
-    for (let i = 0; i < materials.length; i++) {
-      let mat = materials[i]
-      if (!mat) {
-        continue
-      }
-      
-      const name = (mat.name as string | undefined) ?? ''
-      const screenish = isLikelyScreenMaterial(name)
-      const glassish = isLikelyGlassMaterial(name)
-
-      // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
-      if (
-        quality === 'high' &&
-        !screenish &&
-        !glassish &&
-        (mat as any).isMeshStandardMaterial &&
-        !(mat as any).isMeshPhysicalMaterial &&
-        !mat.transparent
-      ) {
-        const standard = mat as MeshStandardMaterial
-        const physical = new MeshPhysicalMaterial()
-        MeshStandardMaterial.prototype.copy.call(physical, standard)
-        
-        physical.clearcoat = 1.0
-        physical.clearcoatRoughness = 0.1
-        
-        mat = physical
-        materials[i] = physical
-        
-        if (Array.isArray(mesh.material)) {
-          mesh.material[i] = physical
-        } else {
-          mesh.material = physical
-        }
-      }
-
-      const material: any = mat
-
-      // 0. Texture Optimization (Resize & Loop Protection)
-      if (material.map) { material.map = optimizeTexture(material.map) }
-      if (material.emissiveMap) { material.emissiveMap = optimizeTexture(material.emissiveMap) }
-      if (material.normalMap) { material.normalMap = optimizeTexture(material.normalMap) }
-      if (material.roughnessMap) { material.roughnessMap = optimizeTexture(material.roughnessMap) }
-      if (material.metalnessMap) { material.metalnessMap = optimizeTexture(material.metalnessMap) }
-      if (material.aoMap) { material.aoMap = optimizeTexture(material.aoMap) }
-      if (material.alphaMap) { material.alphaMap = optimizeTexture(material.alphaMap) }
-
-      // 1. Color Space
-      setTextureColorSpace(material.map, SRGBColorSpace)
-      setTextureColorSpace(material.emissiveMap, SRGBColorSpace)
-      setTextureColorSpace(material.normalMap, NoColorSpace)
-      setTextureColorSpace(material.roughnessMap, NoColorSpace)
-      setTextureColorSpace(material.metalnessMap, NoColorSpace)
-      setTextureColorSpace(material.aoMap, NoColorSpace)
-      setTextureColorSpace(material.alphaMap, NoColorSpace)
-      setTextureColorSpace(material.lightMap, LinearSRGBColorSpace)
-
-      // 2. Filter Quality & GPU Upload
-      setTextureAnisotropy(material.map, r, quality)
-      setTextureAnisotropy(material.normalMap, r, quality)
-
-      // 3. Emissive Boost
-      if (
-        material.emissiveMap &&
-        material.emissive &&
-        material.emissive instanceof Color
-      ) {
-        if (material.emissive.equals(new Color(0x000000))) {
-          material.emissive.setRGB(1, 1, 1)
-        }
-      }
-
-      if (material.emissiveMap || screenish) {
-        const boost = screenish ? screenNameBoost : 1
-        material.emissiveIntensity = Math.max(
-          material.emissiveIntensity,
-          emissiveIntensity * boost,
-        )
-      }
-
-      // 4. Glass Tweaks
-      if (glassish) {
-        material.transmission = 0
-        material.thickness = 0.5
-        material.ior = 1.5
-        material.roughness = 0.02
-        material.metalness = 0.0
-        material.transparent = true
-        material.envMapIntensity = Math.max(material.envMapIntensity, 2.0)
-      }
-
-      if (typeof material.envMapIntensity === 'number' && !glassish) {
-        material.envMapIntensity = envMapIntensity
-      }
-
-      clampMaterialScalars(material)
-      material.needsUpdate = true
+    if ((obj as any).isMesh) {
+      meshes.push(obj as Mesh)
     }
   })
+
+  // Process in chunks to yield to main thread
+  const CHUNK_SIZE = 10
+  for (let k = 0; k < meshes.length; k += CHUNK_SIZE) {
+    const chunk = meshes.slice(k, k + CHUNK_SIZE)
+    
+    for (const mesh of chunk) {
+      const materials: Material[] = Array.isArray(mesh.material)
+        ? mesh.material
+        : [mesh.material]
+
+      for (let i = 0; i < materials.length; i++) {
+        let mat = materials[i]
+        if (!mat) {
+          continue
+        }
+        
+        const name = (mat.name as string | undefined) ?? ''
+        const screenish = isLikelyScreenMaterial(name)
+        const glassish = isLikelyGlassMaterial(name)
+
+        // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
+        if (
+          quality === 'high' &&
+          !screenish &&
+          !glassish &&
+          (mat as any).isMeshStandardMaterial &&
+          !(mat as any).isMeshPhysicalMaterial &&
+          !mat.transparent
+        ) {
+          const standard = mat as MeshStandardMaterial
+          const physical = new MeshPhysicalMaterial()
+          MeshStandardMaterial.prototype.copy.call(physical, standard)
+          
+          physical.clearcoat = 1.0
+          physical.clearcoatRoughness = 0.1
+          
+          mat = physical
+          materials[i] = physical
+          
+          if (Array.isArray(mesh.material)) {
+            mesh.material[i] = physical
+          } else {
+            mesh.material = physical
+          }
+        }
+
+        const material: any = mat
+
+        // 0. Texture Optimization (Resize & Loop Protection)
+        if (material.map) { material.map = optimizeTexture(material.map) }
+        if (material.emissiveMap) { material.emissiveMap = optimizeTexture(material.emissiveMap) }
+        if (material.normalMap) { material.normalMap = optimizeTexture(material.normalMap) }
+        if (material.roughnessMap) { material.roughnessMap = optimizeTexture(material.roughnessMap) }
+        if (material.metalnessMap) { material.metalnessMap = optimizeTexture(material.metalnessMap) }
+        if (material.aoMap) { material.aoMap = optimizeTexture(material.aoMap) }
+        if (material.alphaMap) { material.alphaMap = optimizeTexture(material.alphaMap) }
+
+        // 1. Color Space
+        setTextureColorSpace(material.map, SRGBColorSpace)
+        setTextureColorSpace(material.emissiveMap, SRGBColorSpace)
+        setTextureColorSpace(material.normalMap, NoColorSpace)
+        setTextureColorSpace(material.roughnessMap, NoColorSpace)
+        setTextureColorSpace(material.metalnessMap, NoColorSpace)
+        setTextureColorSpace(material.aoMap, NoColorSpace)
+        setTextureColorSpace(material.alphaMap, NoColorSpace)
+        setTextureColorSpace(material.lightMap, LinearSRGBColorSpace)
+
+        // 2. Filter Quality & GPU Upload
+        setTextureAnisotropy(material.map, r, quality)
+        setTextureAnisotropy(material.normalMap, r, quality)
+
+        // 3. Emissive Boost
+        if (
+          material.emissiveMap &&
+          material.emissive &&
+          material.emissive instanceof Color
+        ) {
+          if (material.emissive.equals(new Color(0x000000))) {
+            material.emissive.setRGB(1, 1, 1)
+          }
+        }
+
+        if (material.emissiveMap || screenish) {
+          const boost = screenish ? screenNameBoost : 1
+          material.emissiveIntensity = Math.max(
+            material.emissiveIntensity,
+            emissiveIntensity * boost,
+          )
+        }
+
+        // 4. Glass Tweaks
+        if (glassish) {
+          material.transmission = 0
+          material.thickness = 0.5
+          material.ior = 1.5
+          material.roughness = 0.02
+          material.metalness = 0.0
+          material.transparent = true
+          material.envMapIntensity = Math.max(material.envMapIntensity, 2.0)
+        }
+
+        if (typeof material.envMapIntensity === 'number' && !glassish) {
+          material.envMapIntensity = envMapIntensity
+        }
+
+        clampMaterialScalars(material)
+        material.needsUpdate = true
+      }
+    }
+
+    // Yield to main thread every chunk
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
 }
 
 export function diagnoseMaterials(root: Object3D): void {
