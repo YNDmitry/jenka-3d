@@ -16,11 +16,13 @@ export function useInteractiveHotspots(
   const activeInteraction = ref<string | null>(null)
   const tooltipVisible = ref(false)
   const glowNudge = reactive({ x: 0, y: 0, z: 0 })
+  const lookAtNudge = reactive({ x: 0, y: 0, z: 0 })
+
   let ctx: gsap.Context | null = null
   let activeObject: Object3D | null = null
 
   let leaveTimer: any = null
-  let showTimer: gsap.core.Tween | null = null // Store the GSAP delayedCall
+  let showTimer: gsap.core.Tween | null = null
 
   onMounted(() => {
     ctx = gsap.context(() => {})
@@ -30,7 +32,8 @@ export function useInteractiveHotspots(
     ctx?.revert()
   })
 
-  function onGlowEnter(item: InteractableItem) {
+  // Accept optional hitPoint from the raycaster event
+  function onGlowEnter(item: InteractableItem, hitPoint?: Vector3) {
     if (activeInteraction.value === item.id) {
       return
     }
@@ -40,13 +43,11 @@ export function useInteractiveHotspots(
       leaveTimer = null
     }
     
-    // Kill pending show timer if switching targets fast
     if (showTimer) {
       showTimer.kill()
       showTimer = null
     }
 
-    // Reset previous object if any
     if (activeObject) {
       activeObject.userData.hideGlint = false
     }
@@ -58,28 +59,50 @@ export function useInteractiveHotspots(
     tooltipVisible.value = false
     document.body.style.cursor = 'pointer'
 
-    // Force update matrix to get correct world position even if scene graph changed
     item.object.updateMatrixWorld(true)
 
-    const basePos = new Vector3(...layoutCamPos.value)
-    const targetPos = item.object.getWorldPosition(new Vector3())
-    const direction = targetPos.clone().sub(basePos)
-
-    // Stronger zoom on hover (0.6 instead of 0.35)
-    const nudgeTarget = direction.multiplyScalar(0.6)
+    let targetX, targetY, targetZ;
     
+    if (hitPoint) {
+      targetX = hitPoint.x
+      targetY = hitPoint.y
+      targetZ = hitPoint.z
+    } else {
+      const worldPos = item.object.getWorldPosition(new Vector3())
+      targetX = worldPos.x
+      targetY = worldPos.y
+      targetZ = worldPos.z
+    }
+
+    // CLOSER ZOOM:
+    const SAFE_DISTANCE = 1.8 // Much closer for detail view
+    const desiredCamZ = targetZ + SAFE_DISTANCE
+    
+    const baseZ = layoutCamPos.value[2]
+    const nudgeZ = desiredCamZ - baseZ
+
     if (ctx) {
       ctx.add(() => {
-        gsap.to(glowNudge, {
-          x: nudgeTarget.x,
-          y: nudgeTarget.y,
-          z: nudgeTarget.z,
-          duration: 1.2,
+        // 1. Look EXACTLY at the hit point
+        gsap.to(lookAtNudge, {
+          x: targetX,
+          y: targetY,
+          z: targetZ,
+          duration: 0.8,
           ease: 'power2.out',
           overwrite: true,
         })
 
-        // Store the timer
+        // 2. Move Camera EXACTLY in front of the hit point
+        gsap.to(glowNudge, {
+          x: targetX, 
+          y: targetY,
+          z: nudgeZ, 
+          duration: 0.8,
+          ease: 'power2.out',
+          overwrite: true,
+        })
+
         showTimer = gsap.delayedCall(0.15, () => {
           if (activeInteraction.value === item.id) {
             tooltipVisible.value = true
@@ -116,13 +139,21 @@ export function useInteractiveHotspots(
             x: 0,
             y: 0,
             z: 0,
-            duration: 1.0,
+            duration: 0.6,
+            ease: 'power2.out',
+            overwrite: true,
+          })
+          gsap.to(lookAtNudge, {
+            x: 0,
+            y: 0,
+            z: 0,
+            duration: 0.6,
             ease: 'power2.out',
             overwrite: true,
           })
         })
       }
-    }, 100)
+    }, 150)
   }
 
   function reset() {
@@ -139,12 +170,16 @@ export function useInteractiveHotspots(
       showTimer = null
     }
 
-    // Fix: Kill any pending animations to prevents stuck offsets
     gsap.killTweensOf(glowNudge)
+    gsap.killTweensOf(lookAtNudge)
     
     glowNudge.x = 0
     glowNudge.y = 0
     glowNudge.z = 0
+    lookAtNudge.x = 0
+    lookAtNudge.y = 0
+    lookAtNudge.z = 0
+    
     if (leaveTimer) {
       clearTimeout(leaveTimer)
       leaveTimer = null
@@ -155,6 +190,7 @@ export function useInteractiveHotspots(
     activeInteraction,
     tooltipVisible,
     glowNudge,
+    lookAtNudge,
     onGlowEnter,
     onGlowLeave,
     reset,

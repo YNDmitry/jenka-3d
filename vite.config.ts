@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import glsl from 'vite-plugin-glsl'
 import { templateCompilerOptions } from '@tresjs/core'
 import { resolve } from 'node:path'
+import mkcert from 'vite-plugin-mkcert'
 
 const printWebflowScripts = () => ({
   name: 'print-webflow-scripts',
@@ -22,6 +23,7 @@ const printWebflowScripts = () => ({
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   plugins: [
+    mkcert(),
     vue({
       ...templateCompilerOptions,
     }),
@@ -39,6 +41,7 @@ export default defineConfig(({ mode }) => ({
     include: ['vue', 'three', '@tresjs/core', '@tresjs/cientos'],
   },
   server: {
+    https: true,
     cors: {
       origin: '*',
     },

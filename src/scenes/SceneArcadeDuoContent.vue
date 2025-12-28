@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, onUnmounted, ref, shallowRef, watch, toRaw } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 
 import {
   BloomPmndrs,
   BrightnessContrastPmndrs,
   EffectComposerPmndrs,
-  SMAA,
+  SMAAPmndrs as SMAA,
   ToneMappingPmndrs,
   VignettePmndrs,
 } from '@tresjs/post-processing'
@@ -44,6 +44,9 @@ const props = defineProps<{
   dpr?: number | [number, number]
   trigger?: number
 }>()
+
+// --- Helper for Optimization ---
+const getRaw = (obj: any) => toRaw(obj)
 
 const { emitFromCanvas } = useWebflowIntegration(props.container)
 
@@ -190,15 +193,15 @@ const lightConfig = computed(() => {
   return {
     key: {
       pos: [3.5, 5.5, 6.5] as [number, number, number],
-      intensity: 2.0 * intensityMod,
+      intensity: 1.6 * intensityMod,
     },
     fill: {
       pos: [-6.5, 2.5, 4.0] as [number, number, number],
-      intensity: 0.5 * intensityMod,
+      intensity: 0.6 * intensityMod,
     },
     rim: {
       pos: [0.0, 4.0, -6.0] as [number, number, number],
-      intensity: 1.5 * intensityMod,
+      intensity: 1.2 * intensityMod,
     },
   }
 })
@@ -230,8 +233,8 @@ const stagePos = computed(() => {
     <Environment preset="city" :blur="1.0" :background="false" />
   </Suspense>
 
-  <!-- Professional Studio Lighting (Matched to Compare Scene) -->
-  <TresAmbientLight :intensity="0.05" />
+  <!-- Professional Studio Lighting (Darker Ambient for mood) -->
+  <TresAmbientLight :intensity="0.4" />
 
   <!-- Key Light: Main source -->
   <TresDirectionalLight
@@ -257,7 +260,7 @@ const stagePos = computed(() => {
   <TresGroup ref="stageRef" :position="stagePos">
     <primitive
       v-if="modelA"
-      :object="modelA"
+      :object="getRaw(modelA)"
       @click="(e: any) => handleClick(e, 'A')"
       @pointer-enter="() => handleHover('A', true)"
       @pointerenter="() => handleHover('A', true)"
@@ -266,7 +269,7 @@ const stagePos = computed(() => {
     />
     <primitive
       v-if="modelB"
-      :object="modelB"
+      :object="getRaw(modelB)"
       @click="(e: any) => handleClick(e, 'B')"
       @pointer-enter="() => handleHover('B', true)"
       @pointerenter="() => handleHover('B', true)"
@@ -288,7 +291,9 @@ const stagePos = computed(() => {
         :radius="postfx.bloom.radius"
         mipmap-blur
       />
-      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
+      <!-- Moodier Darker Look: Higher Contrast, Negative Brightness -->
+      <BrightnessContrastPmndrs :contrast="0.1" :brightness="-0.05" />
+      
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
       <SMAA v-if="postfx.smaa" />

@@ -249,6 +249,12 @@ export async function optimizeModel(
         const name = (mat.name as string | undefined) ?? ''
         const screenish = isLikelyScreenMaterial(name)
         const glassish = isLikelyGlassMaterial(name)
+        // Heuristic for the machine body/case
+        const isBody = name.toLowerCase().includes('body') || 
+                       name.toLowerCase().includes('frame') || 
+                       name.toLowerCase().includes('cabinet') ||
+                       name.toLowerCase().includes('plastic_black') ||
+                       name.toLowerCase().includes('metal_black');
 
         // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
         if (
@@ -329,6 +335,18 @@ export async function optimizeModel(
           material.metalness = 0.0
           material.transparent = true
           material.envMapIntensity = Math.max(material.envMapIntensity, 2.0)
+        }
+
+        // 5. Body/Case Darkening (Fix for washed out blacks)
+        if (isBody && material.color) {
+           // If color is greyish, darken it significantly
+           if (material.color.r < 0.5 && material.color.g < 0.5 && material.color.b < 0.5) {
+              material.color.multiplyScalar(0.2) // Reduce brightness by 80%
+           }
+           // Ensure it's not too shiny if it's plastic
+           if (material.roughness < 0.4) {
+              material.roughness = 0.4
+           }
         }
 
         if (typeof material.envMapIntensity === 'number' && !glassish) {

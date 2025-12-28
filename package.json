@@ -29,6 +29,7 @@
     "typescript": "latest",
     "vite": "^7.1.6",
     "vite-plugin-glsl": "^1.5.1",
+    "vite-plugin-mkcert": "^1.17.9",
     "vue-tsc": "latest"
   }
 }

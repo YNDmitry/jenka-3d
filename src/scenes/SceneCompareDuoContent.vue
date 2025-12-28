@@ -2,10 +2,11 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch, toRaw } from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import gsap from 'gsap'
-import { MeshBasicMaterial, Mesh, SphereGeometry, DoubleSide } from 'three'
+import { MeshBasicMaterial, SphereGeometry, DoubleSide, PerspectiveCamera } from 'three'
 
 import {
   BloomPmndrs,
+  BrightnessContrastPmndrs,
   EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
   ToneMappingPmndrs,
@@ -54,6 +55,9 @@ const emit = defineEmits<{
   (e: 'state', state: LoaderState): void
   (e: 'change-mode', mode: CompareMode): void
 }>()
+
+// --- Helper for Optimization ---
+const getRaw = (obj: any) => toRaw(obj)
 
 const { emitFromCanvas } = useWebflowIntegration(props.container)
 
@@ -233,6 +237,7 @@ const {
   activeInteraction,
   tooltipVisible,
   glowNudge,
+  lookAtNudge, // Re-enabled
   onGlowEnter,
   onGlowLeave,
   reset: resetHotspots,
@@ -332,6 +337,7 @@ const postfx = computed(() =>
   }),
 )
 
+// PUNCHY LIGHTING CONFIG (Softened slightly to save screens)
 const lightConfig = computed(() => {
   const isMobile = props.device === 'mobile'
   const intensityMod = isMobile ? 0.8 : 1.0
@@ -341,15 +347,15 @@ const lightConfig = computed(() => {
     return {
       key: {
         pos: [-3.5, 5.5, 6.5] as [number, number, number],
-        intensity: 0.7 * intensityMod,
+        intensity: 1.6 * intensityMod, // Reduced from 2.0
       },
       fill: {
         pos: [6.5, 2.5, 4.0] as [number, number, number],
-        intensity: 0.1 * intensityMod,
+        intensity: 0.6 * intensityMod,
       },
       rim: {
         pos: [0.0, 4.0, -6.0] as [number, number, number],
-        intensity: 1.0 * intensityMod,
+        intensity: 1.2 * intensityMod, // Reduced from 1.5
       },
     }
   }
@@ -357,15 +363,15 @@ const lightConfig = computed(() => {
   return {
     key: {
       pos: [3.5, 5.5, 6.5] as [number, number, number],
-      intensity: 0.7 * intensityMod,
+      intensity: 1.6 * intensityMod, // Reduced from 2.0
     },
     fill: {
       pos: [-6.5, 2.5, 4.0] as [number, number, number],
-      intensity: 0.1 * intensityMod,
+      intensity: 0.6 * intensityMod,
     },
     rim: {
       pos: [0.0, 4.0, -6.0] as [number, number, number],
-      intensity: 1.0 * intensityMod,
+      intensity: 1.2 * intensityMod, // Reduced from 1.5
     },
   }
 })
@@ -379,18 +385,6 @@ const invisibleMaterial = new MeshBasicMaterial({
   side: DoubleSide,
   color: 0xffffff,
 })
-
-const createHotspotMeshes = (items: any[]) =>
-  items.map((item) => {
-    const m = new Mesh(glowGeom, invisibleMaterial)
-    m.position.set(item.position[0], item.position[1], item.position[2])
-    m.scale.set(1.2, 1.2, 1.2)
-    m.userData = { id: item.id, label: item.label, isHotspot: true, item }
-    return m
-  })
-
-const hotspotMeshesA = computed(() => createHotspotMeshes(interactablesA.value))
-const hotspotMeshesB = computed(() => createHotspotMeshes(interactablesB.value))
 
 watch(state, (s) => emit('state', s))
 
@@ -489,13 +483,15 @@ watch(
 )
 
 // --- Render Loop ---
+const stageRef = shallowRef<any>(null)
+const cameraRef = shallowRef<PerspectiveCamera | null>(null)
 
-// --- Render Loop ---
+// Optimized Render Loop: Direct Camera Manipulation
 onBeforeRender(({ elapsed, delta }) => {
   if (!props.active || state.value !== 'ready') return
   if (typeof elapsed !== 'number' || isNaN(elapsed)) return
 
-  // Параллакс в Grid режиме
+  // Parallax in Grid Mode
   if (stageRef.value) {
     if (mode.value === 'grid' && !props.reducedMotion) {
       const strength = CONSTANTS.controls.parallaxStrength
@@ -518,6 +514,29 @@ onBeforeRender(({ elapsed, delta }) => {
     }
   }
 
+  // Camera Updates (Moved from Computed to Loop for Performance)
+  if (cameraRef.value) {
+    // 1. Update Position
+    const cx = layout.value.camPos[0] + camNudge.x + glowNudge.x
+    const cy = layout.value.camPos[1] + camNudge.y + glowNudge.y
+    const cz = layout.value.camPos[2] + camNudge.z + glowNudge.z
+    cameraRef.value.position.set(cx, cy, cz)
+
+    // 2. Update LookAt (Standard Center LookAt + Nudge)
+    cameraRef.value.lookAt(
+      lookAtRef.x + lookAtNudge.x,
+      lookAtRef.y + lookAtNudge.y,
+      lookAtRef.z + lookAtNudge.z
+    )
+
+    // 3. Update FOV
+    const newFov = layout.value.fov + fovNudge.value
+    if (Math.abs(cameraRef.value.fov - newFov) > 0.01) {
+      cameraRef.value.fov = newFov
+      cameraRef.value.updateProjectionMatrix()
+    }
+  }
+
   try {
     glintsA?.update(elapsed)
     glintsB?.update(elapsed + 0.5)
@@ -525,23 +544,13 @@ onBeforeRender(({ elapsed, delta }) => {
     // Suppress update errors to keep scene alive
   }
 })
-
-const stageRef = shallowRef<any>(null)
-const cameraPos = computed(() => [
-  layout.value.camPos[0] + camNudge.x + glowNudge.x,
-  layout.value.camPos[1] + camNudge.y + glowNudge.y,
-  layout.value.camPos[2] + camNudge.z + glowNudge.z,
-])
-const cameraLookAt = computed(() => [lookAtRef.x, lookAtRef.y, lookAtRef.z])
-const cameraFov = computed(() => layout.value.fov + fovNudge.value)
 </script>
 
 <template>
   <TresPerspectiveCamera
+    ref="cameraRef"
     make-default
-    :position="cameraPos as any"
-    :fov="cameraFov"
-    :look-at="cameraLookAt"
+    :position="[0,0,10]" 
   />
 
   <Suspense>
@@ -549,7 +558,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
   </Suspense>
 
   <!-- Professional Studio Lighting -->
-  <TresAmbientLight :intensity="0.5" />
+  <TresAmbientLight :intensity="0.6" />
 
   <!-- Key Light: Main source -->
   <TresDirectionalLight
@@ -577,7 +586,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
     <TresGroup ref="groupA">
       <primitive
         v-if="modelA"
-        :object="modelA"
+        :object="getRaw(modelA)"
         @click="(e: any) => handleModelClick(e, 'focus-a')"
         @pointer-down="handlePointerDown"
         @pointerdown="handlePointerDown"
@@ -587,15 +596,20 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         @pointerleave="() => handleHover(null)"
       >
         <template v-if="mode === 'focus-a'">
-          <primitive
-            v-for="(mesh, i) in hotspotMeshesA"
-            :key="mesh.userData.id"
-            :object="mesh"
-            @pointerenter="
+          <!-- Hotspots: Reusing Geometry/Material via Vue Loop -->
+          <TresMesh
+            v-for="item in interactablesA"
+            :key="item.id"
+            :position="item.position"
+            :scale="activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]"
+            :geometry="glowGeom"
+            :material="invisibleMaterial"
+            :user-data="{ id: item.id, label: item.label, isHotspot: true, item }"
+            @pointerenter="(e: any) =>
               device === 'desktop' &&
               mode === 'focus-a' &&
               !isDragging &&
-              onGlowEnter(mesh.userData.item)
+              onGlowEnter(item, e.point)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-a')"
@@ -603,17 +617,17 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
             @pointerdown="handlePointerDown"
           >
             <Html
-              v-if="activeInteraction === mesh.userData.id && tooltipVisible"
+              v-if="activeInteraction === item.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
               :style="{ pointerEvents: 'none' }"
             >
               <div
                 class="jenka-tech-hud"
-                :class="{ 'is-mirrored': mesh.position.x < 0 }"
+                :class="{ 'is-mirrored': item.position[0] < 0 }"
               >
                 <div class="hud-box">
-                  {{ mesh.userData.label }}
+                  {{ item.label }}
                 </div>
                 <svg
                   class="hud-leader"
@@ -639,7 +653,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
                 </svg>
               </div>
             </Html>
-          </primitive>
+          </TresMesh>
         </template>
       </primitive>
     </TresGroup>
@@ -648,7 +662,7 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
     <TresGroup ref="groupB">
       <primitive
         v-if="modelB"
-        :object="modelB"
+        :object="getRaw(modelB)"
         @click="(e: any) => handleModelClick(e, 'focus-b')"
         @pointer-down="handlePointerDown"
         @pointerdown="handlePointerDown"
@@ -658,15 +672,20 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         @pointerleave="() => handleHover(null)"
       >
         <template v-if="mode === 'focus-b'">
-          <primitive
-            v-for="(mesh, i) in hotspotMeshesB"
-            :key="mesh.userData.id"
-            :object="mesh"
-            @pointerenter="
+          <!-- Hotspots B -->
+          <TresMesh
+            v-for="item in interactablesB"
+            :key="item.id"
+            :position="item.position"
+            :scale="activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]"
+            :geometry="glowGeom"
+            :material="invisibleMaterial"
+            :user-data="{ id: item.id, label: item.label, isHotspot: true, item }"
+            @pointerenter="(e: any) =>
               device === 'desktop' &&
               mode === 'focus-b' &&
               !isDragging &&
-              onGlowEnter(mesh.userData.item)
+              onGlowEnter(item, e.point)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-b')"
@@ -674,17 +693,17 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
             @pointerdown="handlePointerDown"
           >
             <Html
-              v-if="activeInteraction === mesh.userData.id && tooltipVisible"
+              v-if="activeInteraction === item.id && tooltipVisible"
               :distance-factor="1.2"
               :transform="false"
               :style="{ pointerEvents: 'none' }"
             >
               <div
                 class="jenka-tech-hud"
-                :class="{ 'is-mirrored': mesh.position.x < 0 }"
+                :class="{ 'is-mirrored': item.position[0] < 0 }"
               >
                 <div class="hud-box">
-                  {{ mesh.userData.label }}
+                  {{ item.label }}
                 </div>
                 <svg
                   class="hud-leader"
@@ -710,13 +729,13 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
                 </svg>
               </div>
             </Html>
-          </primitive>
+          </TresMesh>
         </template>
       </primitive>
     </TresGroup>
   </TresGroup>
 
-  <!-- <Suspense>
+  <Suspense>
     <EffectComposerPmndrs v-if="quality === 'high' && state === 'ready' && rendererReady" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
@@ -726,8 +745,9 @@ const cameraFov = computed(() => layout.value.fov + fovNudge.value)
         :radius="postfx.bloom.radius"
         mipmap-blur
       />
+      <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
-  </Suspense> -->
+  </Suspense>
 </template>
