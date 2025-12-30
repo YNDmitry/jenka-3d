@@ -60,44 +60,53 @@ export function useInteractiveHotspots(
 
     item.object.updateMatrixWorld(true)
 
-    // STABILITY FIX: Pure Dolly Zoom
-    // Instead of centering the object (which slides it away from the mouse),
-    // we move the camera ALONG the line of sight. This keeps the object
-    // in the exact same screen position while making it larger.
+    // HYBRID FOCUS LOGIC:
+    // Pure Dolly (Factor 0.0) = Stable mouse, but high/low elements clip off screen.
+    // Pure Center (Factor 1.0) = Object safe in center, but slides away from mouse.
+    // Hybrid (Factor 0.5) = Pulls object 50% towards center. Safe visibility + Low slide speed.
     
-    // 1. Get World Positions
     const worldPos = item.object.getWorldPosition(new Vector3())
     const camPos = new Vector3(...layoutCamPos.value)
     
-    // 2. Calculate Vector from Camera to Object
+    // 1. Calculate Distances
     const vec = new Vector3().subVectors(worldPos, camPos)
-    const dist = vec.length()
+    const currentDist = vec.length()
+    const TARGET_DIST = 2.8 // Increased slightly for better context
     
-    // 3. Calculate Stop Point (Dolly)
-    const TARGET_DIST = 2.5 // Comfortable inspection distance
-    const moveRatio = Math.max(0, (dist - TARGET_DIST) / dist)
+    // 2. Calculate "Dolly" Position (Line of Sight)
+    const moveRatio = Math.max(0, (currentDist - TARGET_DIST) / currentDist)
+    const dollyPos = camPos.clone().add(vec.clone().multiplyScalar(moveRatio))
     
-    // 4. Calculate Nudge Vector (How much to move from original pos)
-    const nudge = vec.multiplyScalar(moveRatio)
+    // 3. Calculate "Ideal" Position (Perfect Centering)
+    // Camera placed directly in front of object on Z-axis
+    const idealPos = new Vector3(worldPos.x, worldPos.y, worldPos.z + TARGET_DIST)
+    
+    // 4. Blend Factors
+    const BLEND = 0.5
+    
+    // Interpolate Camera Position
+    const finalCamPos = new Vector3().lerpVectors(dollyPos, idealPos, BLEND)
+    const targetNudge = finalCamPos.sub(camPos)
+
+    // Interpolate LookAt Target (Tilt camera up/down/left/right towards object)
+    // 0,0,0 is the base LookAt.
+    const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
 
     if (ctx) {
       ctx.add(() => {
-        // Do NOT rotate camera to face object (this causes centering/sliding).
-        // Keep looking at the main scene center.
         gsap.to(lookAtNudge, {
-          x: 0,
-          y: 0,
-          z: 0,
+          x: targetLookAt.x,
+          y: targetLookAt.y,
+          z: targetLookAt.z,
           duration: 1.0,
           ease: 'power3.out',
           overwrite: true,
         })
 
-        // Move camera physically towards the object
         gsap.to(glowNudge, {
-          x: nudge.x, 
-          y: nudge.y,
-          z: nudge.z, 
+          x: targetNudge.x, 
+          y: targetNudge.y,
+          z: targetNudge.z, 
           duration: 1.0,
           ease: 'power3.out',
           overwrite: true,
