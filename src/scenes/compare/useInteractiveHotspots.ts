@@ -34,15 +34,34 @@ export function useInteractiveHotspots(
   })
 
   function onGlowEnter(item: InteractableItem, _hitPoint?: Vector3) {
-    if (activeInteraction.value === item.id) {
-      return
-    }
-
+    // 1. Handle Debounce / Mouse Slip
+    // If we are "leaving" but return quickly, cancel the leave.
+    const wasLeaving = !!leaveTimer
     if (leaveTimer) {
       clearTimeout(leaveTimer)
       leaveTimer = null
     }
-    
+
+    // 2. Check if already active
+    if (activeInteraction.value === item.id) {
+      // If we salvaged a session, ensure UI state is restored
+      if (wasLeaving) {
+        document.body.style.cursor = 'pointer'
+        
+        // If tooltip wasn't visible yet (and timer was killed by leave), restart it
+        if (!tooltipVisible.value) {
+          if (showTimer) showTimer.kill()
+          showTimer = gsap.delayedCall(0.2, () => {
+            if (activeInteraction.value === item.id) {
+              tooltipVisible.value = true
+            }
+          })
+        }
+      }
+      return
+    }
+
+    // 3. Cleanup previous state (if switching directly from A to B)
     if (showTimer) {
       showTimer.kill()
       showTimer = null
@@ -57,6 +76,7 @@ export function useInteractiveHotspots(
       activeObject.userData.hideGlint = false
     }
 
+    // 4. Activate New State
     activeInteraction.value = item.id
     activeObject = item.object
     activeObject.userData.hideGlint = true
@@ -72,21 +92,17 @@ export function useInteractiveHotspots(
     if (ctx) {
       ctx.add(() => {
         // DYNAMIC CHASE LOGIC:
-        // We recalculate the target every frame. This handles the case where
-        // the user hovers the model WHILE it is still transitioning/flying in.
-        // Instead of locking to the "mid-flight" position (bug), the camera
-        // will smoothly chase the object to its final destination.
-        
+        // Recalculate target every frame to handle moving objects (transitions)
         currentTween = gsap.to(progress, {
           t: 1,
           duration: 1.0,
           ease: 'power3.out',
           onUpdate: () => {
-             // 1. Get fresh World Pos (Object might be moving!)
+             // 1. Get fresh World Pos
              const worldPos = item.object.getWorldPosition(new Vector3())
              const camPos = new Vector3(...layoutCamPos.value)
              
-             // 2. Hybrid Focus Logic (same as before)
+             // 2. Hybrid Focus Logic
              const vec = new Vector3().subVectors(worldPos, camPos)
              const currentDist = vec.length()
              const TARGET_DIST = 2.8
@@ -100,16 +116,11 @@ export function useInteractiveHotspots(
              const targetNudge = finalCamPos.sub(camPos)
              const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
 
-             // 3. Interpolate Nudge (Start -> Target)
-             // We manually lerp based on the GSAP progress 't'
-             // This ensures we start exactly where we are and end exactly where the object is
-             
-             // LookAt
+             // 3. Interpolate Nudge
              lookAtNudge.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * progress.t
              lookAtNudge.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * progress.t
              lookAtNudge.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * progress.t
 
-             // GlowNudge (Pos)
              glowNudge.x = startGlow.x + (targetNudge.x - startGlow.x) * progress.t
              glowNudge.y = startGlow.y + (targetNudge.y - startGlow.y) * progress.t
              glowNudge.z = startGlow.z + (targetNudge.z - startGlow.z) * progress.t
@@ -162,7 +173,6 @@ export function useInteractiveHotspots(
             duration: 0.8,
             ease: 'power3.out',
             onUpdate: () => {
-               // Tween back to 0,0,0
                lookAtNudge.x = startLookAt.x * (1 - progress.t)
                lookAtNudge.y = startLookAt.y * (1 - progress.t)
                lookAtNudge.z = startLookAt.z * (1 - progress.t)
