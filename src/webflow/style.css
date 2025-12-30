@@ -134,3 +134,8 @@
   height: 48px;
   position: relative;
 }
+
+/* Interactive Mode Override */
+.scene-wrapper .interactive-mode canvas {
+  touch-action: none !important;
+}

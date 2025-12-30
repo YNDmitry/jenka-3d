@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { TresCanvas } from '@tresjs/core'
 import { NoToneMapping, SRGBColorSpace, ACESFilmicToneMapping } from 'three'
 import RenderDriver from '../three/RenderDriver.vue'
@@ -32,8 +32,13 @@ const emit = defineEmits<{
   (e: 'change-mode', mode: CompareMode): void
 }>()
 
+const mode = ref<CompareMode>('grid')
+
 const onState = (s: LoaderState) => emit('state', s)
-const onChangeMode = (m: CompareMode) => emit('change-mode', m)
+const onChangeMode = (m: CompareMode) => {
+  mode.value = m
+  emit('change-mode', m)
+}
 
 const transparent = true
 const toneMapping = computed(() =>
@@ -44,6 +49,7 @@ const antialias = computed(() => props.quality !== 'high')
 
 <template>
   <TresCanvas
+    :class="{ 'interactive-mode': mode !== 'grid' }"
     render-mode="on-demand"
     :alpha="transparent"
     :clear-alpha="transparent ? 0 : 1"
