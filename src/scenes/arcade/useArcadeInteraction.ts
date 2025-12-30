@@ -257,7 +257,7 @@ export function useArcadeInteraction(
     // Floating Animation
     let floatY = 0
     let floatRot = 0
-    if (!reducedMotion.value) {
+    if (false && !reducedMotion.value) {
       floatY = Math.sin(elapsed * 1.5) * 0.08
       floatRot = Math.cos(elapsed * 0.5) * 0.02
     }
