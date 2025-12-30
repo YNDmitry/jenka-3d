@@ -23,6 +23,7 @@ export function useInteractiveHotspots(
 
   let leaveTimer: any = null
   let showTimer: gsap.core.Tween | null = null
+  let currentTween: gsap.core.Tween | null = null
 
   onMounted(() => {
     ctx = gsap.context(() => {})
@@ -47,6 +48,11 @@ export function useInteractiveHotspots(
       showTimer = null
     }
 
+    if (currentTween) {
+      currentTween.kill()
+      currentTween = null
+    }
+
     if (activeObject) {
       activeObject.userData.hideGlint = false
     }
@@ -58,58 +64,56 @@ export function useInteractiveHotspots(
     tooltipVisible.value = false
     document.body.style.cursor = 'pointer'
 
-    item.object.updateMatrixWorld(true)
-
-    // HYBRID FOCUS LOGIC:
-    // Pure Dolly (Factor 0.0) = Stable mouse, but high/low elements clip off screen.
-    // Pure Center (Factor 1.0) = Object safe in center, but slides away from mouse.
-    // Hybrid (Factor 0.5) = Pulls object 50% towards center. Safe visibility + Low slide speed.
-    
-    const worldPos = item.object.getWorldPosition(new Vector3())
-    const camPos = new Vector3(...layoutCamPos.value)
-    
-    // 1. Calculate Distances
-    const vec = new Vector3().subVectors(worldPos, camPos)
-    const currentDist = vec.length()
-    const TARGET_DIST = 2.8 // Increased slightly for better context
-    
-    // 2. Calculate "Dolly" Position (Line of Sight)
-    const moveRatio = Math.max(0, (currentDist - TARGET_DIST) / currentDist)
-    const dollyPos = camPos.clone().add(vec.clone().multiplyScalar(moveRatio))
-    
-    // 3. Calculate "Ideal" Position (Perfect Centering)
-    // Camera placed directly in front of object on Z-axis
-    const idealPos = new Vector3(worldPos.x, worldPos.y, worldPos.z + TARGET_DIST)
-    
-    // 4. Blend Factors
-    const BLEND = 0.5
-    
-    // Interpolate Camera Position
-    const finalCamPos = new Vector3().lerpVectors(dollyPos, idealPos, BLEND)
-    const targetNudge = finalCamPos.sub(camPos)
-
-    // Interpolate LookAt Target (Tilt camera up/down/left/right towards object)
-    // 0,0,0 is the base LookAt.
-    const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
+    // Capture start state for smooth interpolation
+    const startGlow = new Vector3(glowNudge.x, glowNudge.y, glowNudge.z)
+    const startLookAt = new Vector3(lookAtNudge.x, lookAtNudge.y, lookAtNudge.z)
+    const progress = { t: 0 }
 
     if (ctx) {
       ctx.add(() => {
-        gsap.to(lookAtNudge, {
-          x: targetLookAt.x,
-          y: targetLookAt.y,
-          z: targetLookAt.z,
+        // DYNAMIC CHASE LOGIC:
+        // We recalculate the target every frame. This handles the case where
+        // the user hovers the model WHILE it is still transitioning/flying in.
+        // Instead of locking to the "mid-flight" position (bug), the camera
+        // will smoothly chase the object to its final destination.
+        
+        currentTween = gsap.to(progress, {
+          t: 1,
           duration: 1.0,
           ease: 'power3.out',
-          overwrite: true,
-        })
+          onUpdate: () => {
+             // 1. Get fresh World Pos (Object might be moving!)
+             const worldPos = item.object.getWorldPosition(new Vector3())
+             const camPos = new Vector3(...layoutCamPos.value)
+             
+             // 2. Hybrid Focus Logic (same as before)
+             const vec = new Vector3().subVectors(worldPos, camPos)
+             const currentDist = vec.length()
+             const TARGET_DIST = 2.8
+             
+             const moveRatio = Math.max(0, (currentDist - TARGET_DIST) / currentDist)
+             const dollyPos = camPos.clone().add(vec.clone().multiplyScalar(moveRatio))
+             const idealPos = new Vector3(worldPos.x, worldPos.y, worldPos.z + TARGET_DIST)
+             
+             const BLEND = 0.5
+             const finalCamPos = new Vector3().lerpVectors(dollyPos, idealPos, BLEND)
+             const targetNudge = finalCamPos.sub(camPos)
+             const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
 
-        gsap.to(glowNudge, {
-          x: targetNudge.x, 
-          y: targetNudge.y,
-          z: targetNudge.z, 
-          duration: 1.0,
-          ease: 'power3.out',
-          overwrite: true,
+             // 3. Interpolate Nudge (Start -> Target)
+             // We manually lerp based on the GSAP progress 't'
+             // This ensures we start exactly where we are and end exactly where the object is
+             
+             // LookAt
+             lookAtNudge.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * progress.t
+             lookAtNudge.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * progress.t
+             lookAtNudge.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * progress.t
+
+             // GlowNudge (Pos)
+             glowNudge.x = startGlow.x + (targetNudge.x - startGlow.x) * progress.t
+             glowNudge.y = startGlow.y + (targetNudge.y - startGlow.y) * progress.t
+             glowNudge.z = startGlow.z + (targetNudge.z - startGlow.z) * progress.t
+          }
         })
 
         showTimer = gsap.delayedCall(0.2, () => {
@@ -141,24 +145,32 @@ export function useInteractiveHotspots(
       activeInteraction.value = null
       tooltipVisible.value = false
       leaveTimer = null
+      
+      if (currentTween) {
+        currentTween.kill()
+      }
+
+      // Capture current state to tween back to 0 smoothly
+      const startGlow = new Vector3(glowNudge.x, glowNudge.y, glowNudge.z)
+      const startLookAt = new Vector3(lookAtNudge.x, lookAtNudge.y, lookAtNudge.z)
+      const progress = { t: 0 }
 
       if (ctx) {
         ctx.add(() => {
-          gsap.to(glowNudge, {
-            x: 0,
-            y: 0,
-            z: 0,
+           currentTween = gsap.to(progress, {
+            t: 1,
             duration: 0.8,
             ease: 'power3.out',
-            overwrite: true,
-          })
-          gsap.to(lookAtNudge, {
-            x: 0,
-            y: 0,
-            z: 0,
-            duration: 0.8,
-            ease: 'power3.out',
-            overwrite: true,
+            onUpdate: () => {
+               // Tween back to 0,0,0
+               lookAtNudge.x = startLookAt.x * (1 - progress.t)
+               lookAtNudge.y = startLookAt.y * (1 - progress.t)
+               lookAtNudge.z = startLookAt.z * (1 - progress.t)
+               
+               glowNudge.x = startGlow.x * (1 - progress.t)
+               glowNudge.y = startGlow.y * (1 - progress.t)
+               glowNudge.z = startGlow.z * (1 - progress.t)
+            }
           })
         })
       }
@@ -179,8 +191,10 @@ export function useInteractiveHotspots(
       showTimer = null
     }
 
-    gsap.killTweensOf(glowNudge)
-    gsap.killTweensOf(lookAtNudge)
+    if (currentTween) {
+      currentTween.kill()
+      currentTween = null
+    }
     
     glowNudge.x = 0
     glowNudge.y = 0
