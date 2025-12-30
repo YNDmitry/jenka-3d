@@ -32,8 +32,9 @@ export function useInteractiveHotspots(
     ctx?.revert()
   })
 
-  // Accept optional hitPoint from the raycaster event
-  function onGlowEnter(item: InteractableItem, hitPoint?: Vector3) {
+  // We ignore hitPoint to ensure stable centering on the Object itself,
+  // preventing the "chasing cursor" effect where the object slides away from the mouse.
+  function onGlowEnter(item: InteractableItem, _hitPoint?: Vector3) {
     if (activeInteraction.value === item.id) {
       return
     }
@@ -61,21 +62,17 @@ export function useInteractiveHotspots(
 
     item.object.updateMatrixWorld(true)
 
-    let targetX, targetY, targetZ;
-    
-    if (hitPoint) {
-      targetX = hitPoint.x
-      targetY = hitPoint.y
-      targetZ = hitPoint.z
-    } else {
-      const worldPos = item.object.getWorldPosition(new Vector3())
-      targetX = worldPos.x
-      targetY = worldPos.y
-      targetZ = worldPos.z
-    }
+    // STABILITY FIX: Always use the object's center world position.
+    // Using the raycast hitPoint caused unpredictable camera jumps (high/low)
+    // and made the object "slide" away from the cursor.
+    const worldPos = item.object.getWorldPosition(new Vector3())
+    const targetX = worldPos.x
+    const targetY = worldPos.y
+    const targetZ = worldPos.z
 
     // CLOSER ZOOM:
-    const SAFE_DISTANCE = 1.8 // Much closer for detail view
+    // Increased slightly to 2.2 to be less aggressive/disorienting
+    const SAFE_DISTANCE = 2.2 
     const desiredCamZ = targetZ + SAFE_DISTANCE
     
     const baseZ = layoutCamPos.value[2]
@@ -83,27 +80,27 @@ export function useInteractiveHotspots(
 
     if (ctx) {
       ctx.add(() => {
-        // 1. Look EXACTLY at the hit point
+        // 1. Look EXACTLY at the object center
         gsap.to(lookAtNudge, {
           x: targetX,
           y: targetY,
           z: targetZ,
-          duration: 0.8,
-          ease: 'power2.out',
+          duration: 1.0, // Smoother duration
+          ease: 'power3.out', // Professional smooth easing
           overwrite: true,
         })
 
-        // 2. Move Camera EXACTLY in front of the hit point
+        // 2. Move Camera EXACTLY in front of the object
         gsap.to(glowNudge, {
           x: targetX, 
           y: targetY,
           z: nudgeZ, 
-          duration: 0.8,
-          ease: 'power2.out',
+          duration: 1.0,
+          ease: 'power3.out',
           overwrite: true,
         })
 
-        showTimer = gsap.delayedCall(0.15, () => {
+        showTimer = gsap.delayedCall(0.2, () => {
           if (activeInteraction.value === item.id) {
             tooltipVisible.value = true
           }
@@ -139,16 +136,16 @@ export function useInteractiveHotspots(
             x: 0,
             y: 0,
             z: 0,
-            duration: 0.6,
-            ease: 'power2.out',
+            duration: 0.8,
+            ease: 'power3.out',
             overwrite: true,
           })
           gsap.to(lookAtNudge, {
             x: 0,
             y: 0,
             z: 0,
-            duration: 0.6,
-            ease: 'power2.out',
+            duration: 0.8,
+            ease: 'power3.out',
             overwrite: true,
           })
         })
