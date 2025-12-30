@@ -55,7 +55,7 @@ export function useCompareInteraction(
     active: computed(() => mode.value !== 'grid'),
     target: dragTarget,
     axis: 'xy',
-    sensitivity: 0.006,
+    sensitivity: device.value === 'desktop' ? 0.006 : 0.012,
     damping: 6,
     clampX: [-0.1, 0.6], // Низ нельзя (-0.1), верх чуть-чуть (0.6)
     clampY: [-1.2, 1.2], // Спину нельзя (±1.2 рад)
@@ -63,6 +63,7 @@ export function useCompareInteraction(
       document.body.style.cursor = 'grab'
       document.documentElement.style.cursor = ''
       if (dragElement) {
+        dragElement.style.touchAction = ''
         dragElement.style.cursor = ''
         dragElement = null
       }
@@ -100,6 +101,7 @@ export function useCompareInteraction(
         try {
           dragElement.setPointerCapture(native.pointerId)
           dragElement.style.cursor = 'grabbing'
+          dragElement.style.touchAction = 'none'
         } catch (err) {
           // Ignore if capture fails
         }
@@ -152,7 +154,6 @@ export function useCompareInteraction(
     // When switching back to grid, the drag target becomes null immediately,
     // so the drag loop stops updating rotation. We must manually reset the
     // rotation of the group that was just active.
-    if (newVal === 'grid') {
       const duration = 1.0
       const ease = 'power2.out'
 
@@ -162,7 +163,6 @@ export function useCompareInteraction(
       if (oldVal === 'focus-b' && groupB.value) {
         gsap.to(groupB.value.rotation, { x: 0, y: 0, duration, ease })
       }
-    }
   })
 
   return {

@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch, toRaw } from 'vue'
+import {
+  computed,
+  onMounted,
+  onUnmounted,
+  ref,
+  shallowRef,
+  watch,
+  toRaw,
+} from 'vue'
 import { useLoop, useTres } from '@tresjs/core'
 import gsap from 'gsap'
-import { MeshBasicMaterial, SphereGeometry, DoubleSide, PerspectiveCamera } from 'three'
+import {
+  MeshBasicMaterial,
+  SphereGeometry,
+  DoubleSide,
+  PerspectiveCamera,
+} from 'three'
 
 import {
   BloomPmndrs,
@@ -33,7 +46,11 @@ import { useCompareInteraction } from './compare/useCompareInteraction'
 import { useCompareModels } from './compare/useCompareModels'
 import { useInteractiveHotspots } from './compare/useInteractiveHotspots'
 import { useWebflowIntegration } from '../shared/useWebflowIntegration'
-import { useShadowBaking, precompileScene, unwrapRenderer } from '../three/utils'
+import {
+  useShadowBaking,
+  precompileScene,
+  unwrapRenderer,
+} from '../three/utils'
 
 const props = defineProps<{
   container?: HTMLElement
@@ -73,6 +90,7 @@ watch(
 )
 
 const { onBeforeRender } = useLoop()
+const hasInteracted = ref(false)
 
 // --- 1. Models & State ---
 const groupA = shallowRef<any>(null)
@@ -154,6 +172,10 @@ function handleModelClick(e: any, targetMode: CompareMode) {
 }
 
 const isDragging = computed(() => drag.isDragging.value)
+function onPointerDownWrapper(e: any) {
+  hasInteracted.value = true
+  handlePointerDown(e)
+}
 
 // Hover Effect
 function handleHover(target: 'a' | 'b' | null) {
@@ -299,6 +321,7 @@ function handleModeChange(newMode: CompareMode, internal = true) {
   }
 
   internalMode.value = newMode
+  if (newMode !== 'grid') hasInteracted.value = false
   emit('change-mode', newMode)
 
   // Set attribute manually if internal (since Webflow didn't do it yet)
@@ -464,6 +487,18 @@ watch(mode, (newMode) => {
   glintsA?.setEnabled?.(newMode === 'focus-a')
   glintsB?.setEnabled?.(newMode === 'focus-b')
 })
+watch(
+  () => [mode.value, props.device],
+  ([m, d]) => {
+    if (d !== 'desktop') {
+      document.body.style.overflow = m !== 'grid' ? 'hidden' : ''
+    }
+  },
+  { immediate: true },
+)
+onUnmounted(() => {
+  document.body.style.overflow = ''
+})
 
 watch(
   () => props.emissive,
@@ -526,7 +561,7 @@ onBeforeRender(({ elapsed, delta }) => {
     cameraRef.value.lookAt(
       lookAtRef.x + lookAtNudge.x,
       lookAtRef.y + lookAtNudge.y,
-      lookAtRef.z + lookAtNudge.z
+      lookAtRef.z + lookAtNudge.z,
     )
 
     // 3. Update FOV
@@ -547,11 +582,7 @@ onBeforeRender(({ elapsed, delta }) => {
 </script>
 
 <template>
-  <TresPerspectiveCamera
-    ref="cameraRef"
-    make-default
-    :position="[0,0,10]" 
-  />
+  <TresPerspectiveCamera ref="cameraRef" make-default :position="[0, 0, 10]" />
 
   <Suspense>
     <Environment preset="city" :blur="1.0" :background="false" />
@@ -588,8 +619,8 @@ onBeforeRender(({ elapsed, delta }) => {
         v-if="modelA"
         :object="getRaw(modelA)"
         @click="(e: any) => handleModelClick(e, 'focus-a')"
-        @pointer-down="handlePointerDown"
-        @pointerdown="handlePointerDown"
+        @pointer-down="onPointerDownWrapper"
+        @pointerdown="onPointerDownWrapper"
         @pointer-enter="() => handleHover('a')"
         @pointerenter="() => handleHover('a')"
         @pointer-leave="() => handleHover(null)"
@@ -601,20 +632,28 @@ onBeforeRender(({ elapsed, delta }) => {
             v-for="item in interactablesA"
             :key="item.id"
             :position="item.position"
-            :scale="activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]"
+            :scale="
+              activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]
+            "
             :geometry="glowGeom"
             :material="invisibleMaterial"
-            :user-data="{ id: item.id, label: item.label, isHotspot: true, item }"
-            @pointerenter="(e: any) =>
-              device === 'desktop' &&
-              mode === 'focus-a' &&
-              !isDragging &&
-              onGlowEnter(item, e.point)
+            :user-data="{
+              id: item.id,
+              label: item.label,
+              isHotspot: true,
+              item,
+            }"
+            @pointerenter="
+              (e: any) =>
+                device === 'desktop' &&
+                mode === 'focus-a' &&
+                !isDragging &&
+                onGlowEnter(item, e.point)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-a')"
-            @pointer-down="handlePointerDown"
-            @pointerdown="handlePointerDown"
+            @pointer-down="onPointerDownWrapper"
+            @pointerdown="onPointerDownWrapper"
           >
             <Html
               v-if="activeInteraction === item.id && tooltipVisible"
@@ -664,8 +703,8 @@ onBeforeRender(({ elapsed, delta }) => {
         v-if="modelB"
         :object="getRaw(modelB)"
         @click="(e: any) => handleModelClick(e, 'focus-b')"
-        @pointer-down="handlePointerDown"
-        @pointerdown="handlePointerDown"
+        @pointer-down="onPointerDownWrapper"
+        @pointerdown="onPointerDownWrapper"
         @pointer-enter="() => handleHover('b')"
         @pointerenter="() => handleHover('b')"
         @pointer-leave="() => handleHover(null)"
@@ -677,20 +716,28 @@ onBeforeRender(({ elapsed, delta }) => {
             v-for="item in interactablesB"
             :key="item.id"
             :position="item.position"
-            :scale="activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]"
+            :scale="
+              activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]
+            "
             :geometry="glowGeom"
             :material="invisibleMaterial"
-            :user-data="{ id: item.id, label: item.label, isHotspot: true, item }"
-            @pointerenter="(e: any) =>
-              device === 'desktop' &&
-              mode === 'focus-b' &&
-              !isDragging &&
-              onGlowEnter(item, e.point)
+            :user-data="{
+              id: item.id,
+              label: item.label,
+              isHotspot: true,
+              item,
+            }"
+            @pointerenter="
+              (e: any) =>
+                device === 'desktop' &&
+                mode === 'focus-b' &&
+                !isDragging &&
+                onGlowEnter(item, e.point)
             "
             @pointerleave="onGlowLeave"
             @click="(e: any) => handleModelClick(e, 'focus-b')"
-            @pointer-down="handlePointerDown"
-            @pointerdown="handlePointerDown"
+            @pointer-down="onPointerDownWrapper"
+            @pointerdown="onPointerDownWrapper"
           >
             <Html
               v-if="activeInteraction === item.id && tooltipVisible"
@@ -737,7 +784,15 @@ onBeforeRender(({ elapsed, delta }) => {
 
   <Suspense>
     <!-- CRITICAL CRASH FIX: Disable Post-Processing on ALL mobile devices -->
-    <EffectComposerPmndrs v-if="quality === 'high' && device === 'desktop' && state === 'ready' && rendererReady" :multisampling="0">
+    <EffectComposerPmndrs
+      v-if="
+        quality === 'high' &&
+        device === 'desktop' &&
+        state === 'ready' &&
+        rendererReady
+      "
+      :multisampling="0"
+    >
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
@@ -751,4 +806,60 @@ onBeforeRender(({ elapsed, delta }) => {
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>
+  <Html
+    v-if="!hasInteracted && isFocus && device !== 'desktop'"
+    center
+    :position="[0, 0, 0]"
+    wrapper-class="hint-wrapper"
+    :style="{ pointerEvents: 'none', zIndex: 100 }"
+    ><div
+      style="
+        opacity: 0.9;
+        animation: hint-pulse 2.5s infinite;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        pointer-events: none;
+      "
+    >
+      <svg
+        width="70"
+        height="70"
+        viewBox="0 0 24 24"
+        fill="white"
+        style="filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5))"
+      >
+        <path
+          d="M12 7C6.5 7 2 9.2 2 12c0 2.2 2.9 4.1 7 4.8V20l4-4l-4-4v2.7c-3.2-.6-5-1.9-5-2.7c0-1.1 3-3 8-3s8 1.9 8 3c0 .7-1.5 1.9-4 2.5v2.1c3.5-.8 6-2.5 6-4.6c0-2.8-4.5-5-10-5"
+        /></svg
+      ><span
+        style="
+          color: white;
+          font-family: sans-serif;
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 1px;
+          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+          opacity: 0.9;
+          text-align: center;
+        "
+        >SWIPE TO ROTATE</span
+      >
+    </div></Html
+  >
 </template>
+
+<style>
+@keyframes hint-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+</style>

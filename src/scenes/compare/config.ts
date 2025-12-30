@@ -36,11 +36,11 @@ export const CONSTANTS = {
       background: { pos: [0, 0, -1], scale: 0.8, rot: [0, 0, 0] },
     },
     tablet: {
-      target: { pos: [0, 0, 0], scale: 1.1, rot: [0, 0, 0] },
+      target: { pos: [0, -0.4, 0], scale: 1.1, rot: [0, 0, 0] },
       background: { pos: [0, 0, -1], scale: 0.7, rot: [0, 0, 0] },
     },
     mobile: {
-      target: { pos: [0, -1, 0], scale: 1.5, rot: [0, 0, 0] },
+      target: { pos: [0, -1.3, 0], scale: 1.5, rot: [0, 0, 0] },
       background: { pos: [0, 0, -1.5], scale: 0.6, rot: [0, 0, 0] },
     },
   },
