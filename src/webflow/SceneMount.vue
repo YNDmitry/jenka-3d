@@ -31,8 +31,13 @@ const size = ref({ width: 0, height: 0 })
 const windowWidth = ref(window.innerWidth)
 
 const isVisible = ref(true)
+const hasEnteredViewport = ref(false)
 const hasSize = computed(() => size.value.width > 2 && size.value.height > 2)
 const active = computed(() => isVisible.value && hasSize.value)
+const shouldMount = computed(() => {
+  if (device.value === 'desktop') return true
+  return hasEnteredViewport.value
+})
 
 const reducedMotion = ref(prefersReducedMotion())
 
@@ -116,6 +121,7 @@ onMounted(() => {
 
   SharedObserver.observeIntersection(props.container, (entry) => {
     isVisible.value = entry.isIntersecting
+    if (entry.isIntersecting) hasEnteredViewport.value = true
   })
 
   mo = new MutationObserver((mutations) => {
@@ -181,7 +187,7 @@ const containerStyle = {
         </div>
       </div>
     </Transition>
-    <component
+    <component v-if="shouldMount"
       :is="sceneComponent"
       :container="props.container"
       :config="props.config"
