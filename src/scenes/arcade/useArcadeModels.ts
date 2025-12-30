@@ -1,6 +1,16 @@
-import { ref, shallowRef, markRaw, type Ref } from 'vue'
-import { type Material, type Mesh, MeshStandardMaterial, type Object3D } from 'three'
-import type { LoaderState, QualityTier, DeviceClass, WebflowSceneConfig } from '../../shared/types'
+import { markRaw, ref, type Ref, shallowRef } from 'vue'
+import {
+  type Material,
+  type Mesh,
+  MeshStandardMaterial,
+  type Object3D,
+} from 'three'
+import type {
+  DeviceClass,
+  LoaderState,
+  QualityTier,
+  WebflowSceneConfig,
+} from '../../shared/types'
 import { loadGLTFWithTweaks } from '../../three/materialTweaks'
 import { disposeObject3D } from '../../three/dispose'
 
@@ -42,8 +52,8 @@ export function useArcadeModels(
     const targets: Object3D[] = []
     // Shuffle
     for (let i = candidates.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      const j = Math.floor(Math.random() * (i + 1))
+      ;[candidates[i], candidates[j]] = [candidates[j], candidates[i]]
     }
 
     // Take top N
@@ -76,12 +86,15 @@ export function useArcadeModels(
         const mapName = mat.emissiveMap?.name || ''
         const isExcluded = /nayax/i.test(matName) || /nayax/i.test(mapName)
         const isScreenName =
-          !isExcluded && (screenRegex.test(matName) || screenRegex.test(mapName))
+          !isExcluded &&
+          (screenRegex.test(matName) || screenRegex.test(mapName))
         const isEmissiveName = /emiss|emit|neon|glow/i.test(matName)
 
         if (mat.emissiveMap || isScreenName || isEmissiveName) {
           const base =
-            typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 1
+            typeof mat.emissiveIntensity === 'number'
+              ? mat.emissiveIntensity
+              : 1
           const boost = isScreenName ? 2.5 : 1.5
           out.push({
             material: mat,
@@ -107,6 +120,7 @@ export function useArcadeModels(
   }): Promise<void> {
     // Skip loading on mobile/tablet for performance/design
     if (device.value === 'mobile' || device.value === 'tablet') {
+      // Logic removed as per new direction to stop texture flipping
       state.value = 'ready'
       return
     }
@@ -120,8 +134,12 @@ export function useArcadeModels(
     state.value = 'loading'
     errorMessage.value = null
 
-    if (modelA.value) disposeObject3D(modelA.value)
-    if (modelB.value) disposeObject3D(modelB.value)
+    if (modelA.value) {
+      disposeObject3D(modelA.value)
+    }
+    if (modelB.value) {
+      disposeObject3D(modelB.value)
+    }
     modelA.value = null
     modelB.value = null
 
@@ -174,16 +192,16 @@ export function useArcadeModels(
               name.includes('matrix') ||
               name.includes('9_gms')
             ) {
-                                           m.envMapIntensity = 0.0 // No environmental reflections on screens
-                                           m.roughness = 0.2 // Glossy for premium glass look
-                                           m.metalness = 0.0
-                                           // High static emission for "On" state
-                                           m.emissiveIntensity = 1.2
-                                           m.needsUpdate = true
-                                           targetScreens.push(m)
-                                         }            // SKIP SPHERE - It will be handled by a specific fix later
+              m.envMapIntensity = 0.0 // No environmental reflections on screens
+              m.roughness = 0.2 // Glossy for premium glass look
+              m.metalness = 0.0
+              // High static emission for "On" state
+              m.emissiveIntensity = 1.2
+              m.needsUpdate = true
+              targetScreens.push(m)
+            } // SKIP SPHERE - It will be handled by a specific fix later
             if (name.includes('sphere')) {
-               return
+              return
             }
 
             if (
@@ -197,7 +215,9 @@ export function useArcadeModels(
               m.emissiveIntensity > 0.1 ||
               m.roughness < 0.1 ||
               m.roughness >= 0.5
-            ) return
+            ) {
+              return
+            }
 
             // Make it look like High Quality Powder Coated Metal
             m.metalness = 0.8
@@ -228,7 +248,7 @@ export function useArcadeModels(
           sourceMat = child.material
         }
 
-        if (child.isMesh && child.name === "Cylinder014") {
+        if (child.isMesh && child.name === 'Cylinder014') {
           child.material.color.multiplyScalar(0.8)
         }
       })
@@ -267,6 +287,9 @@ export function useArcadeModels(
       collectEmissiveMaterials(sceneA)
       collectEmissiveMaterials(sceneB)
 
+      // NOTE: Removed fixMarqueeTexture texture flipping logic as we are now handling
+      // orientation via global model scale (positive X) in config.ts
+
       state.value = 'ready'
     } catch (err) {
       console.error('[useArcadeModels] Load error:', err)
@@ -284,6 +307,6 @@ export function useArcadeModels(
     buttonsB,
     loadModels,
     LAYER_A,
-    LAYER_B
+    LAYER_B,
   }
 }

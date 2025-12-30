@@ -1,5 +1,6 @@
 import {
   Cache,
+  CanvasTexture,
   Color,
   LinearSRGBColorSpace,
   LoadingManager,
@@ -7,16 +8,14 @@ import {
   MeshStandardMaterial,
   NoColorSpace,
   SRGBColorSpace,
-  CanvasTexture,
 } from 'three'
 import type { Material, Mesh, Object3D, Texture, WebGLRenderer } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import type { QualityTier } from '../shared/types'
-import { clamp, warnOnce } from '../shared/utils'
 import { unwrapRenderer } from './utils'
-import { isCoarsePointer } from '../shared/utils'
+import { clamp, isCoarsePointer, warnOnce } from '../shared/utils'
 
 export interface MaterialTweaksOptions {
   debug: boolean
@@ -112,12 +111,16 @@ function clampMaterialScalars(material: any): void {
  */
 function resizeTexture(tex: Texture, maxDim: number): Texture {
   const image = tex.image as HTMLImageElement | HTMLCanvasElement | undefined
-  if (!image || !image.width || !image.height) { return tex }
+  if (!image || !image.width || !image.height) {
+    return tex
+  }
 
   const width = image.width
   const height = image.height
 
-  if (width <= maxDim && height <= maxDim) { return tex }
+  if (width <= maxDim && height <= maxDim) {
+    return tex
+  }
 
   let newWidth = width
   let newHeight = height
@@ -127,8 +130,7 @@ function resizeTexture(tex: Texture, maxDim: number): Texture {
       newWidth = maxDim
       newHeight = Math.round(height * (maxDim / width))
     }
-  }
-  else {
+  } else {
     if (height > maxDim) {
       newHeight = maxDim
       newWidth = Math.round(width * (maxDim / height))
@@ -139,7 +141,9 @@ function resizeTexture(tex: Texture, maxDim: number): Texture {
   canvas.width = newWidth
   canvas.height = newHeight
   const ctx = canvas.getContext('2d')
-  if (!ctx) { return tex }
+  if (!ctx) {
+    return tex
+  }
 
   ctx.drawImage(image, 0, 0, newWidth, newHeight)
 
@@ -156,6 +160,7 @@ function resizeTexture(tex: Texture, maxDim: number): Texture {
   newTex.offset.copy(tex.offset)
   newTex.center.copy(tex.center)
   newTex.rotation = tex.rotation
+  newTex.flipY = tex.flipY
   newTex.name = tex.name
   newTex.userData = tex.userData
 
@@ -191,34 +196,36 @@ export async function optimizeModel(
   }
 
   const r = unwrapRenderer(renderer)
-  
+
   // Cache to prevent infinite loops and redundant processing
   const processedTextures = new Set<string>()
   const resizedTextures = new Map<Texture, Texture>()
 
   const optimizeTexture = (tex: Texture | null): Texture | null => {
-    if (!tex) { return null }
-    if (processedTextures.has(tex.uuid)) { 
+    if (!tex) {
+      return null
+    }
+    if (processedTextures.has(tex.uuid)) {
       // If we already processed this specific instance (or its replacement), return it if mapped
-      return resizedTextures.get(tex) || tex 
+      return resizedTextures.get(tex) || tex
     }
     processedTextures.add(tex.uuid)
 
     // Check size
     const image = tex.image as any
     if (image && (image.width > maxDim || image.height > maxDim)) {
-       // Resize
-       const newTex = resizeTexture(tex, maxDim)
-       
-       // Memory Opt: Disable mipmaps for large textures on mobile to save memory
-       if (isCoarsePointer()) {
-          newTex.generateMipmaps = false
-       }
-       
-       resizedTextures.set(tex, newTex)
-       return newTex
+      // Resize
+      const newTex = resizeTexture(tex, maxDim)
+
+      // Memory Opt: Disable mipmaps for large textures on mobile to save memory
+      if (isCoarsePointer()) {
+        newTex.generateMipmaps = false
+      }
+
+      resizedTextures.set(tex, newTex)
+      return newTex
     }
-    
+
     return tex
   }
 
@@ -234,7 +241,7 @@ export async function optimizeModel(
   const CHUNK_SIZE = 10
   for (let k = 0; k < meshes.length; k += CHUNK_SIZE) {
     const chunk = meshes.slice(k, k + CHUNK_SIZE)
-    
+
     for (const mesh of chunk) {
       const materials: Material[] = Array.isArray(mesh.material)
         ? mesh.material
@@ -245,16 +252,17 @@ export async function optimizeModel(
         if (!mat) {
           continue
         }
-        
+
         const name = (mat.name as string | undefined) ?? ''
         const screenish = isLikelyScreenMaterial(name)
         const glassish = isLikelyGlassMaterial(name)
         // Heuristic for the machine body/case
-        const isBody = name.toLowerCase().includes('body') || 
-                       name.toLowerCase().includes('frame') || 
-                       name.toLowerCase().includes('cabinet') ||
-                       name.toLowerCase().includes('plastic_black') ||
-                       name.toLowerCase().includes('metal_black');
+        const isBody =
+          name.toLowerCase().includes('body') ||
+          name.toLowerCase().includes('frame') ||
+          name.toLowerCase().includes('cabinet') ||
+          name.toLowerCase().includes('plastic_black') ||
+          name.toLowerCase().includes('metal_black')
 
         // UPGRADE: MeshPhysicalMaterial for High Quality (Desktop)
         if (
@@ -268,13 +276,13 @@ export async function optimizeModel(
           const standard = mat as MeshStandardMaterial
           const physical = new MeshPhysicalMaterial()
           MeshStandardMaterial.prototype.copy.call(physical, standard)
-          
+
           physical.clearcoat = 1.0
           physical.clearcoatRoughness = 0.1
-          
+
           mat = physical
           materials[i] = physical
-          
+
           if (Array.isArray(mesh.material)) {
             mesh.material[i] = physical
           } else {
@@ -285,13 +293,27 @@ export async function optimizeModel(
         const material: any = mat
 
         // 0. Texture Optimization (Resize & Loop Protection)
-        if (material.map) { material.map = optimizeTexture(material.map) }
-        if (material.emissiveMap) { material.emissiveMap = optimizeTexture(material.emissiveMap) }
-        if (material.normalMap) { material.normalMap = optimizeTexture(material.normalMap) }
-        if (material.roughnessMap) { material.roughnessMap = optimizeTexture(material.roughnessMap) }
-        if (material.metalnessMap) { material.metalnessMap = optimizeTexture(material.metalnessMap) }
-        if (material.aoMap) { material.aoMap = optimizeTexture(material.aoMap) }
-        if (material.alphaMap) { material.alphaMap = optimizeTexture(material.alphaMap) }
+        if (material.map) {
+          material.map = optimizeTexture(material.map)
+        }
+        if (material.emissiveMap) {
+          material.emissiveMap = optimizeTexture(material.emissiveMap)
+        }
+        if (material.normalMap) {
+          material.normalMap = optimizeTexture(material.normalMap)
+        }
+        if (material.roughnessMap) {
+          material.roughnessMap = optimizeTexture(material.roughnessMap)
+        }
+        if (material.metalnessMap) {
+          material.metalnessMap = optimizeTexture(material.metalnessMap)
+        }
+        if (material.aoMap) {
+          material.aoMap = optimizeTexture(material.aoMap)
+        }
+        if (material.alphaMap) {
+          material.alphaMap = optimizeTexture(material.alphaMap)
+        }
 
         // 1. Color Space
         setTextureColorSpace(material.map, SRGBColorSpace)
@@ -339,14 +361,18 @@ export async function optimizeModel(
 
         // 5. Body/Case Darkening (Fix for washed out blacks)
         if (isBody && material.color) {
-           // If color is greyish, darken it significantly
-           if (material.color.r < 0.5 && material.color.g < 0.5 && material.color.b < 0.5) {
-              material.color.multiplyScalar(0.2) // Reduce brightness by 80%
-           }
-           // Ensure it's not too shiny if it's plastic
-           if (material.roughness < 0.4) {
-              material.roughness = 0.4
-           }
+          // If color is greyish, darken it significantly
+          if (
+            material.color.r < 0.5 &&
+            material.color.g < 0.5 &&
+            material.color.b < 0.5
+          ) {
+            material.color.multiplyScalar(0.2) // Reduce brightness by 80%
+          }
+          // Ensure it's not too shiny if it's plastic
+          if (material.roughness < 0.4) {
+            material.roughness = 0.4
+          }
         }
 
         if (typeof material.envMapIntensity === 'number' && !glassish) {

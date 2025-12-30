@@ -279,10 +279,7 @@ const stagePos = computed(() => {
   </TresGroup>
 
   <Suspense>
-    <EffectComposerPmndrs
-      v-if="quality === 'high'"
-      :multisampling="0"
-    >
+    <EffectComposerPmndrs v-if="quality === 'high'" :multisampling="0">
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
         :intensity="postfx.bloom.strength"
@@ -293,7 +290,7 @@ const stagePos = computed(() => {
       />
       <!-- Moodier Darker Look: Higher Contrast, Negative Brightness -->
       <BrightnessContrastPmndrs :contrast="0.1" :brightness="-0.05" />
-      
+
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
       <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
       <SMAA v-if="postfx.smaa" />
