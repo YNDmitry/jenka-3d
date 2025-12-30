@@ -528,7 +528,7 @@ onBeforeRender(({ elapsed, delta }) => {
 
   // Parallax in Grid Mode
   if (stageRef.value) {
-    if (mode.value === 'grid' && !props.reducedMotion) {
+    if (mode.value === 'grid' && !props.reducedMotion && props.device === 'desktop') {
       const strength = CONSTANTS.controls.parallaxStrength
       const maxRot = 0.07 * strength
       stageRef.value.rotation.y = damp(
