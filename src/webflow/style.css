@@ -20,13 +20,13 @@
   width: 100%;
   height: 100%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 2;
   /* transition handled by animation class */
   opacity: 1;
 }
 
 .bg-proxy.fade-out {
-  animation: zoom-blur-out 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  animation: zoom-blur-out 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
 }
 
 @keyframes zoom-blur-out {
@@ -35,12 +35,12 @@
     filter: blur(0px);
     opacity: 1;
   }
-  40% {
+  10% {
     opacity: 1;
   }
   100% {
-    transform: scale(1.2);
-    filter: blur(15px);
+    transform: scale(1.05);
+    
     opacity: 0;
   }
 }

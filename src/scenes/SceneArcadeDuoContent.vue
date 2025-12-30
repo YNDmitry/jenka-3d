@@ -83,7 +83,12 @@ const {
   computed(() => props.device),
 )
 
-watch(state, (s) => emit('state', s))
+watch(state, (s) => {
+  emit("state", s)
+  if (s === "ready") {
+    playEntryAnimation()
+  }
+})
 
 // OPTIMIZATION: Bake shadows once (Professional performance)
 useShadowBaking(renderer, state, invalidate)
@@ -161,7 +166,7 @@ const onInternalSwap = () => {
 }
 
 // --- Interaction (Swap & Parallax) ---
-const { cameraPosition, handleClick, handleHover, swap } = useArcadeInteraction(
+const { cameraPosition, lightMultiplier, handleClick, handleHover, swap, playEntryAnimation } = useArcadeInteraction(
   computed(() => props.active),
   computed(() => props.device),
   computed(() => props.reducedMotion),
@@ -239,7 +244,7 @@ const stagePos = computed(() => {
   <!-- Key Light: Main source -->
   <TresDirectionalLight
     :position="lightConfig.key.pos"
-    :intensity="lightConfig.key.intensity"
+    :intensity="lightConfig.key.intensity * lightMultiplier"
     :cast-shadow="quality === 'high'"
     :shadow-bias="-0.0001"
   />
@@ -247,14 +252,14 @@ const stagePos = computed(() => {
   <!-- Fill Light: Softens shadows -->
   <TresDirectionalLight
     :position="lightConfig.fill.pos"
-    :intensity="lightConfig.fill.intensity"
+    :intensity="lightConfig.fill.intensity * lightMultiplier"
     color="#bcd7ff"
   />
 
   <!-- Rim Light: Backlight for separation -->
   <TresDirectionalLight
     :position="lightConfig.rim.pos"
-    :intensity="lightConfig.rim.intensity"
+    :intensity="lightConfig.rim.intensity * lightMultiplier"
   />
 
   <TresGroup ref="stageRef" :position="stagePos">
