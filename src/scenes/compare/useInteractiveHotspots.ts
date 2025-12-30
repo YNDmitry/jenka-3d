@@ -47,10 +47,12 @@ export function useInteractiveHotspots(
       // If we salvaged a session, ensure UI state is restored
       if (wasLeaving) {
         document.body.style.cursor = 'pointer'
-        
+
         // If tooltip wasn't visible yet (and timer was killed by leave), restart it
         if (!tooltipVisible.value) {
-          if (showTimer) showTimer.kill()
+          if (showTimer) {
+            showTimer.kill()
+          }
           showTimer = gsap.delayedCall(0.2, () => {
             if (activeInteraction.value === item.id) {
               tooltipVisible.value = true
@@ -98,33 +100,52 @@ export function useInteractiveHotspots(
           duration: 1.0,
           ease: 'power3.out',
           onUpdate: () => {
-             // 1. Get fresh World Pos
-             const worldPos = item.object.getWorldPosition(new Vector3())
-             const camPos = new Vector3(...layoutCamPos.value)
-             
-             // 2. Hybrid Focus Logic
-             const vec = new Vector3().subVectors(worldPos, camPos)
-             const currentDist = vec.length()
-             const TARGET_DIST = 2.8
-             
-             const moveRatio = Math.max(0, (currentDist - TARGET_DIST) / currentDist)
-             const dollyPos = camPos.clone().add(vec.clone().multiplyScalar(moveRatio))
-             const idealPos = new Vector3(worldPos.x, worldPos.y, worldPos.z + TARGET_DIST)
-             
-             const BLEND = 0.5
-             const finalCamPos = new Vector3().lerpVectors(dollyPos, idealPos, BLEND)
-             const targetNudge = finalCamPos.sub(camPos)
-             const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
+            // 1. Get fresh World Pos
+            const worldPos = item.object.getWorldPosition(new Vector3())
+            const camPos = new Vector3(...layoutCamPos.value)
 
-             // 3. Interpolate Nudge
-             lookAtNudge.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * progress.t
-             lookAtNudge.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * progress.t
-             lookAtNudge.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * progress.t
+            // 2. Hybrid Focus Logic
+            const vec = new Vector3().subVectors(worldPos, camPos)
+            const currentDist = vec.length()
+            const TARGET_DIST = 2
 
-             glowNudge.x = startGlow.x + (targetNudge.x - startGlow.x) * progress.t
-             glowNudge.y = startGlow.y + (targetNudge.y - startGlow.y) * progress.t
-             glowNudge.z = startGlow.z + (targetNudge.z - startGlow.z) * progress.t
-          }
+            const moveRatio = Math.max(
+              0,
+              (currentDist - TARGET_DIST) / currentDist,
+            )
+            const dollyPos = camPos
+              .clone()
+              .add(vec.clone().multiplyScalar(moveRatio))
+            const idealPos = new Vector3(
+              worldPos.x,
+              worldPos.y,
+              worldPos.z + TARGET_DIST,
+            )
+
+            const BLEND = 0.5
+            const finalCamPos = new Vector3().lerpVectors(
+              dollyPos,
+              idealPos,
+              BLEND,
+            )
+            const targetNudge = finalCamPos.sub(camPos)
+            const targetLookAt = new Vector3(0, 0, 0).lerp(worldPos, BLEND)
+
+            // 3. Interpolate Nudge
+            lookAtNudge.x =
+              startLookAt.x + (targetLookAt.x - startLookAt.x) * progress.t
+            lookAtNudge.y =
+              startLookAt.y + (targetLookAt.y - startLookAt.y) * progress.t
+            lookAtNudge.z =
+              startLookAt.z + (targetLookAt.z - startLookAt.z) * progress.t
+
+            glowNudge.x =
+              startGlow.x + (targetNudge.x - startGlow.x) * progress.t
+            glowNudge.y =
+              startGlow.y + (targetNudge.y - startGlow.y) * progress.t
+            glowNudge.z =
+              startGlow.z + (targetNudge.z - startGlow.z) * progress.t
+          },
         })
 
         showTimer = gsap.delayedCall(0.2, () => {
@@ -141,7 +162,7 @@ export function useInteractiveHotspots(
       return
     }
     document.body.style.cursor = 'auto'
-    
+
     if (showTimer) {
       showTimer.kill()
       showTimer = null
@@ -156,31 +177,35 @@ export function useInteractiveHotspots(
       activeInteraction.value = null
       tooltipVisible.value = false
       leaveTimer = null
-      
+
       if (currentTween) {
         currentTween.kill()
       }
 
       // Capture current state to tween back to 0 smoothly
       const startGlow = new Vector3(glowNudge.x, glowNudge.y, glowNudge.z)
-      const startLookAt = new Vector3(lookAtNudge.x, lookAtNudge.y, lookAtNudge.z)
+      const startLookAt = new Vector3(
+        lookAtNudge.x,
+        lookAtNudge.y,
+        lookAtNudge.z,
+      )
       const progress = { t: 0 }
 
       if (ctx) {
         ctx.add(() => {
-           currentTween = gsap.to(progress, {
+          currentTween = gsap.to(progress, {
             t: 1,
             duration: 0.8,
             ease: 'power3.out',
             onUpdate: () => {
-               lookAtNudge.x = startLookAt.x * (1 - progress.t)
-               lookAtNudge.y = startLookAt.y * (1 - progress.t)
-               lookAtNudge.z = startLookAt.z * (1 - progress.t)
-               
-               glowNudge.x = startGlow.x * (1 - progress.t)
-               glowNudge.y = startGlow.y * (1 - progress.t)
-               glowNudge.z = startGlow.z * (1 - progress.t)
-            }
+              lookAtNudge.x = startLookAt.x * (1 - progress.t)
+              lookAtNudge.y = startLookAt.y * (1 - progress.t)
+              lookAtNudge.z = startLookAt.z * (1 - progress.t)
+
+              glowNudge.x = startGlow.x * (1 - progress.t)
+              glowNudge.y = startGlow.y * (1 - progress.t)
+              glowNudge.z = startGlow.z * (1 - progress.t)
+            },
           })
         })
       }
@@ -195,7 +220,7 @@ export function useInteractiveHotspots(
 
     activeInteraction.value = null
     tooltipVisible.value = false
-    
+
     if (showTimer) {
       showTimer.kill()
       showTimer = null
@@ -205,14 +230,14 @@ export function useInteractiveHotspots(
       currentTween.kill()
       currentTween = null
     }
-    
+
     glowNudge.x = 0
     glowNudge.y = 0
     glowNudge.z = 0
     lookAtNudge.x = 0
     lookAtNudge.y = 0
     lookAtNudge.z = 0
-    
+
     if (leaveTimer) {
       clearTimeout(leaveTimer)
       leaveTimer = null
