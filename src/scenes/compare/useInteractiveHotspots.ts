@@ -32,8 +32,6 @@ export function useInteractiveHotspots(
     ctx?.revert()
   })
 
-  // We ignore hitPoint to ensure stable centering on the Object itself,
-  // preventing the "chasing cursor" effect where the object slides away from the mouse.
   function onGlowEnter(item: InteractableItem, _hitPoint?: Vector3) {
     if (activeInteraction.value === item.id) {
       return
@@ -62,39 +60,44 @@ export function useInteractiveHotspots(
 
     item.object.updateMatrixWorld(true)
 
-    // STABILITY FIX: Always use the object's center world position.
-    // Using the raycast hitPoint caused unpredictable camera jumps (high/low)
-    // and made the object "slide" away from the cursor.
-    const worldPos = item.object.getWorldPosition(new Vector3())
-    const targetX = worldPos.x
-    const targetY = worldPos.y
-    const targetZ = worldPos.z
-
-    // CLOSER ZOOM:
-    // Increased slightly to 2.2 to be less aggressive/disorienting
-    const SAFE_DISTANCE = 2.2 
-    const desiredCamZ = targetZ + SAFE_DISTANCE
+    // STABILITY FIX: Pure Dolly Zoom
+    // Instead of centering the object (which slides it away from the mouse),
+    // we move the camera ALONG the line of sight. This keeps the object
+    // in the exact same screen position while making it larger.
     
-    const baseZ = layoutCamPos.value[2]
-    const nudgeZ = desiredCamZ - baseZ
+    // 1. Get World Positions
+    const worldPos = item.object.getWorldPosition(new Vector3())
+    const camPos = new Vector3(...layoutCamPos.value)
+    
+    // 2. Calculate Vector from Camera to Object
+    const vec = new Vector3().subVectors(worldPos, camPos)
+    const dist = vec.length()
+    
+    // 3. Calculate Stop Point (Dolly)
+    const TARGET_DIST = 2.5 // Comfortable inspection distance
+    const moveRatio = Math.max(0, (dist - TARGET_DIST) / dist)
+    
+    // 4. Calculate Nudge Vector (How much to move from original pos)
+    const nudge = vec.multiplyScalar(moveRatio)
 
     if (ctx) {
       ctx.add(() => {
-        // 1. Look EXACTLY at the object center
+        // Do NOT rotate camera to face object (this causes centering/sliding).
+        // Keep looking at the main scene center.
         gsap.to(lookAtNudge, {
-          x: targetX,
-          y: targetY,
-          z: targetZ,
-          duration: 1.0, // Smoother duration
-          ease: 'power3.out', // Professional smooth easing
+          x: 0,
+          y: 0,
+          z: 0,
+          duration: 1.0,
+          ease: 'power3.out',
           overwrite: true,
         })
 
-        // 2. Move Camera EXACTLY in front of the object
+        // Move camera physically towards the object
         gsap.to(glowNudge, {
-          x: targetX, 
-          y: targetY,
-          z: nudgeZ, 
+          x: nudge.x, 
+          y: nudge.y,
+          z: nudge.z, 
           duration: 1.0,
           ease: 'power3.out',
           overwrite: true,
