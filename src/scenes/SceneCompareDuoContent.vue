@@ -21,7 +21,7 @@ import {
   BloomPmndrs,
   BrightnessContrastPmndrs,
   EffectComposerPmndrs,
-  SMAAPmndrs as SMAA,
+
   ToneMappingPmndrs,
 } from '@tresjs/post-processing'
 import { ToneMappingMode } from 'postprocessing'
@@ -142,8 +142,9 @@ const {
   groupB,
   computed(() => props.reducedMotion),
   computed(() => layout.value.lookAt),
+
   (newMode) => handleModeChange(newMode),
-  () => emitFromCanvas(),
+  invalidate,
 )
 
 // Wrapper for click to handle scrolling
@@ -399,7 +400,7 @@ const lightConfig = computed(() => {
   }
 })
 
-const glowGeom = new SphereGeometry(0.1, 16, 16)
+const glowGeom = new SphereGeometry(0.11, 16, 16)
 const invisibleMaterial = new MeshBasicMaterial({
   transparent: true,
   opacity: 0,
@@ -528,21 +529,14 @@ onBeforeRender(({ elapsed, delta }) => {
 
   // Parallax in Grid Mode
   if (stageRef.value) {
-    if (mode.value === 'grid' && !props.reducedMotion && props.device === 'desktop') {
-      const strength = CONSTANTS.controls.parallaxStrength
-      const maxRot = 0.07 * strength
-      stageRef.value.rotation.y = damp(
-        stageRef.value.rotation.y,
-        pointer.value.x * maxRot,
-        4,
-        delta,
-      )
-      stageRef.value.rotation.x = damp(
-        stageRef.value.rotation.x,
-        -pointer.value.y * maxRot * 0.7,
-        4,
-        delta,
-      )
+    if (
+      mode.value === 'grid' &&
+      !props.reducedMotion &&
+      props.device === 'desktop'
+    ) {
+      // Parallax disabled by user request - always damp to 0
+      stageRef.value.rotation.x = damp(stageRef.value.rotation.x, 0, 4, delta)
+      stageRef.value.rotation.y = damp(stageRef.value.rotation.y, 0, 4, delta)
     } else {
       stageRef.value.rotation.x = damp(stageRef.value.rotation.x, 0, 4, delta)
       stageRef.value.rotation.y = damp(stageRef.value.rotation.y, 0, 4, delta)
@@ -632,9 +626,7 @@ onBeforeRender(({ elapsed, delta }) => {
             v-for="item in interactablesA"
             :key="item.id"
             :position="item.position"
-            :scale="
-              activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]
-            "
+            :scale="[1, 1, 1]"
             :geometry="glowGeom"
             :material="invisibleMaterial"
             :user-data="{
@@ -716,9 +708,7 @@ onBeforeRender(({ elapsed, delta }) => {
             v-for="item in interactablesB"
             :key="item.id"
             :position="item.position"
-            :scale="
-              activeInteraction === item.id ? [1.6, 1.6, 1.6] : [1.0, 1.0, 1.0]
-            "
+            :scale="[1, 1, 1]"
             :geometry="glowGeom"
             :material="invisibleMaterial"
             :user-data="{
@@ -791,7 +781,7 @@ onBeforeRender(({ elapsed, delta }) => {
         state === 'ready' &&
         rendererReady
       "
-      :multisampling="0"
+      :multisampling="4"
     >
       <BloomPmndrs
         v-if="postfx.bloom.enabled"
@@ -803,7 +793,7 @@ onBeforeRender(({ elapsed, delta }) => {
       />
       <BrightnessContrastPmndrs :contrast="0.05" :brightness="0.0" />
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
-      <SMAA v-if="postfx.smaa" />
+      
     </EffectComposerPmndrs>
   </Suspense>
   <Html

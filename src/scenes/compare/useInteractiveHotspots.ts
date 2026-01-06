@@ -53,7 +53,7 @@ export function useInteractiveHotspots(
           if (showTimer) {
             showTimer.kill()
           }
-          showTimer = gsap.delayedCall(0.2, () => {
+          showTimer = gsap.delayedCall(0.1, () => {
             if (activeInteraction.value === item.id) {
               tooltipVisible.value = true
             }
@@ -148,7 +148,9 @@ export function useInteractiveHotspots(
           },
         })
 
-        showTimer = gsap.delayedCall(0.2, () => {
+        // Instant if switching/returning, fast if fresh
+        const delay = wasLeaving ? 0 : 0.1
+        showTimer = gsap.delayedCall(delay, () => {
           if (activeInteraction.value === item.id) {
             tooltipVisible.value = true
           }

@@ -16,7 +16,7 @@ const { invalidate, renderer } = useTres()
 // Configuration
 const BOOST_WINDOW_MS = 2000
 const SLEEP_WINDOW_MS = 5000
-const BASE_FPS = 24 // Cinematic idle
+const BASE_FPS = 144 // Cinematic idle
 
 const idleFpsLimit = computed(() => {
   if (!props.active) { return 0 }

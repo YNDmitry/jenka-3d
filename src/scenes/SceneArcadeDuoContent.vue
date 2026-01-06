@@ -8,7 +8,6 @@ import {
   EffectComposerPmndrs,
   SMAAPmndrs as SMAA,
   ToneMappingPmndrs,
-  VignettePmndrs,
 } from '@tresjs/post-processing'
 import { ToneMappingMode } from 'postprocessing'
 import { Environment } from '@tresjs/cientos'
@@ -84,8 +83,8 @@ const {
 )
 
 watch(state, (s) => {
-  emit("state", s)
-  if (s === "ready") {
+  emit('state', s)
+  if (s === 'ready') {
     playEntryAnimation()
   }
 })
@@ -166,7 +165,14 @@ const onInternalSwap = () => {
 }
 
 // --- Interaction (Swap & Parallax) ---
-const { cameraPosition, lightMultiplier, handleClick, handleHover, swap, playEntryAnimation } = useArcadeInteraction(
+const {
+  cameraPosition,
+  lightMultiplier,
+  handleClick,
+  handleHover,
+  swap,
+  playEntryAnimation,
+} = useArcadeInteraction(
   computed(() => props.active),
   computed(() => props.device),
   computed(() => props.reducedMotion),
@@ -297,7 +303,6 @@ const stagePos = computed(() => {
       <BrightnessContrastPmndrs :contrast="0.1" :brightness="-0.05" />
 
       <ToneMappingPmndrs :mode="ToneMappingMode.ACES_FILMIC" :exposure="1.0" />
-      <VignettePmndrs v-if="postfx.vignette" :darkness="0.5" :offset="0.1" />
       <SMAA v-if="postfx.smaa" />
     </EffectComposerPmndrs>
   </Suspense>

@@ -42,9 +42,9 @@ const onChangeMode = (m: CompareMode) => {
 
 const transparent = true
 const toneMapping = computed(() =>
-  props.quality === 'high' ? NoToneMapping : ACESFilmicToneMapping,
+  props.quality === 'high' && props.device === 'desktop' ? NoToneMapping : ACESFilmicToneMapping,
 )
-const antialias = computed(() => props.quality !== 'high')
+const antialias = computed(() => true)
 </script>
 
 <template>
